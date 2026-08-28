@@ -61,12 +61,16 @@ jobs:
           import subprocess, sys
           r = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
           print(r.stdout, end="")
-          # _debug and .github/core/fixtures are expected as untracked/modified per release-candidate; check that no unexpected C: dir exists
+          # _debug and .github/core/fixtures are expected as untracked/modified per release-candidate;
+          # check that no unexpected C: dir exists relative to cwd -- this only detects a real bug on
+          # non-Windows runners (a Windows absolute path mishandled as relative). On native Windows,
+          # "C:" is always a valid drive reference and os.path.exists("C:") is unconditionally True,
+          # so the check is a no-op there rather than a false failure.
           import os
-          if os.path.exists("C:"):
+          if sys.platform != "win32" and os.path.exists("C:"):
               print("FAIL — spurious C: dir exists (Windows absolute path mishandled on Linux)")
               sys.exit(1)
-          print("ARTIFACT PASS — no spurious C: dir")
+          print("ARTIFACT PASS — no spurious C: dir (check does not apply on native Windows)" if sys.platform == "win32" else "ARTIFACT PASS — no spurious C: dir")
           # Do not claim GitHub-hosted passed; this is hosted execution itself when run on GitHub
           print("NOTE: GitHub-hosted execution is OBSERVED only when this workflow actually runs on GitHub; local dry-run is NOT GitHub-hosted")
           PY
