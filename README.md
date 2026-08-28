@@ -3,7 +3,7 @@
 **Portfolio project by digitalscorpyun (Michael Kibbe) — AVM Syndicate, 2026**
 **Status:** Offline reproducer ready (live bounded validation 003 passed, portfolio-ready)
 
-> Kitty Hawk is a governed 4-seat agentic workflow for AI citation-integrity incidents — when an AI research system fabricates a citation like *Acme v. Beta, 123 F.4th 456 (9th Cir. 2024)*. It intake-validates versioned evidence packets, verifies `content_sha256` receipt lineage (2 receipts → 1 event via explicit `event_id`), runs deterministic reliability gates (citation / scenario-fidelity / unsupported-number), and halts invalid packets **before any provider call** (`halted_invalid_evidence_packet`, `ask_calls == []`). Every report is `vault_writeback: null`, `not_reviewed / not_authorized`, with explicit human-review escalation. Built for IBM watsonx.ai with IBM Granite (TLS verified for the watsonx.ai service connection, no fallback, `authorize_live=False` with `FakeClient` offline — offline demo makes zero external inference-service calls and therefore no Granite inference), verified by 277 mission + 14 watsonx.ai-service offline checks, semantic determinism scoped. One command reproduces. Live transport to the watsonx.ai service (KH-03 `SSL: UNEXPECTED_EOF` during watsonx.ai request) and 6 controls remain `NOT_YET_MODELED` by design — documented limits, not hidden debt.
+> Kitty Hawk is a governed 4-seat agentic workflow for AI citation-integrity incidents — when an AI research system fabricates a citation like *Acme v. Beta, 123 F.4th 456 (9th Cir. 2024)*. It intake-validates versioned evidence packets, verifies `content_sha256` receipt lineage (2 receipts → 1 event via explicit `event_id`), runs deterministic reliability gates (citation / scenario-fidelity / unsupported-number), and halts invalid packets **before any provider call** (`halted_invalid_evidence_packet`, `ask_calls == []`). Every report is `vault_writeback: null`, `not_reviewed / not_authorized`, with explicit human-review escalation. Built for IBM watsonx.ai with IBM Granite (TLS verified for the watsonx.ai service connection, no fallback, `authorize_live=False` with `FakeClient` offline — offline demo makes zero external inference-service calls and therefore no Granite inference), verified by 269 mission + 17–18 watsonx.ai-service offline checks (public clean-clone counts; see `docs/EVIDENCE.md` for the historical-vs-public distinction), semantic determinism scoped. One command reproduces. Live transport to the watsonx.ai service (KH-03 `SSL: UNEXPECTED_EOF` during watsonx.ai request) and 6 controls remain `NOT_YET_MODELED` by design — documented limits, not hidden debt.
 
 ## One-Command Reproducer (no credentials, no live watsonx.ai inference)
 
@@ -30,10 +30,12 @@ What it does:
 
 ```bash
 PYTHONUTF8=1 python -X utf8 tests/test_mission_citation_fabrication.py
-# All 277 mission_citation_fabrication checks passed.
+# All 269 mission_citation_fabrication checks passed. (2 skipped: historic SYLLO records, expected on a clean clone)
 
 PYTHONUTF8=1 python -X utf8 tests/test_watsonx_client.py
-# All 14 watsonx.ai-service client checks passed.
+# All 17 watsonx_client checks passed (18 in a clean venv where ibm-watsonx-ai is absent --
+# one extra check exercises the initialize_sdk=True fail-closed path, which only
+# applies when the SDK is genuinely absent).
 ```
 
 No live watsonx.ai inference-service call (and therefore no Granite inference), no `.env`, no `verify=False`, no fallback.
@@ -64,11 +66,9 @@ kitty-hawk/
 │   ├── syndicate_router.py
 │   ├── provider_protocol.py
 │   └── watsonx_client.py
-├── tests/                            # 277 + 14 offline checks
+├── tests/                            # 269 (+2 skips) + 17/18 offline checks
 ├── docs/
-│   ├── KITTY_HAWK_CORRECTIONS_REPORT_20260827.md
-│   ├── KITTY_HAWK_LIVE_VALIDATION_003_REPORT_20260827.md
-│   └── FORGE_AAR_20260828.md
+│   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)
 │   ├── KITTY-HAWK-DEMO-VALID-001.json/.md
 │   └── CASE-KITTY-HAWK-LIVE-003.json/.md
@@ -95,9 +95,9 @@ behavior:
 
 Bounded live validation (CASE-KITTY-HAWK-LIVE-003) was executed in the internal Forge with synthetic data only (TLS verified, ≤4 requests, ≤120s, no Vault writeback). No live call is required for portfolio evaluation — the offline reproducer is the primary signal.
 
-> **Disclaimer:** LIVE-003 is bounded-execution evidence only; not VS-ENC acceptance, not operator authorization, not Customer Success acceptance, not public-release readiness. See `docs/KITTY_HAWK_LIVE_VALIDATION_003_REPORT_20260827.md`.
+> **Disclaimer:** LIVE-003 is bounded-execution evidence only; not VS-ENC acceptance, not operator authorization, not Customer Success acceptance, not public-release readiness. See `docs/EVIDENCE.md`.
 
-Outcome (2026-08-27): **PASSED — BOUNDED** — 4/4 seats invoked Granite `ibm/granite-4-h-small` through IBM watsonx.ai, 27s, 3,526 tokens, TLS verified for the watsonx.ai service connection. Evidence in `docs/KITTY_HAWK_LIVE_VALIDATION_003_REPORT_20260827.md` and `examples/CASE-KITTY-HAWK-LIVE-003.*` (historical, not a public runnable).
+Outcome (2026-08-27): **PASSED — BOUNDED** — 4/4 seats invoked Granite `ibm/granite-4-h-small` through IBM watsonx.ai, 27s, 3,526 tokens, TLS verified for the watsonx.ai service connection. Evidence in `docs/EVIDENCE.md` and `examples/CASE-KITTY-HAWK-LIVE-003.*` (historical, not a public runnable).
 
 ## Limitations (NOT_YET_MODELED — explicit, not hidden)
 
@@ -105,7 +105,7 @@ Temporal windows, evidence-sufficiency transitions, mandatory escalation, declar
 
 ## Why This Is Portfolio-Worthy
 
-Not a chatbot — a reliability layer that stops a chatbot from hallucinating citations and proves it halted before calling the model. Shows: intake validation, hash-verified lineage, deterministic gates, human-review enforcement, and honest scope limits. Portfolio framing and AAR in `docs/`.
+Not a chatbot — a reliability layer that stops a chatbot from hallucinating citations and proves it halted before calling the model. Shows: intake validation, hash-verified lineage, deterministic gates, human-review enforcement, and honest scope limits. Portfolio framing and evidence in `docs/EVIDENCE.md`.
 
 ---
 *Teams are from the same truck. This repository is a curated portfolio extract of the author's private development work.*

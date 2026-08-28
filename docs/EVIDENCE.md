@@ -88,7 +88,11 @@ does **not** establish:
     skips (historic SYLLO records not present in this public clean clone — this is the
     correct public-fixture-set count, not the larger historical internal Forge count
     described above, which this repository does not treat as equivalent).
-  - `tests/test_watsonx_client.py`: **14/14 PASS**.
+  - `tests/test_watsonx_client.py`: **17/17 PASS** when `ibm-watsonx-ai` is installed;
+    **18/18 PASS** in a clean venv where it's absent. The `initialize_sdk` offline-
+    construction seam (commit `f1b5933`) added 4 checks over the prior 14; one of the
+    4 (the default-construction-raises-`WatsonXSDKUnavailableError` check) only runs
+    when the SDK is genuinely absent, hence 17 vs. 18.
   - This run exercised the real Windows `winreg` code path natively, rather than the
     `sys.platform="win32"` simulation used in the prior Linux-only validation.
 
