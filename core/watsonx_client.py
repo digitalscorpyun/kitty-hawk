@@ -103,6 +103,53 @@ if missing:
     sys.exit(1)
 
 
+class WatsonXSDKUnavailableError(RuntimeError):
+    """Raised when initialize_sdk=True (the default, live/production
+    construction path) but ibm-watsonx-ai and/or httpx are not importable.
+    Fails closed: never falls back to a substitute provider or a fake."""
+
+
+class WatsonXOfflineConstructionError(RuntimeError):
+    """Raised when ask() is invoked on a WatsonXClient built with
+    initialize_sdk=False. An offline-constructed client carries real,
+    provider-neutral timeout/limit configuration and real manifest/seat-name
+    plumbing for topology tests, but has no live provider attached and must
+    never reach a network call. Tests exercising real provider behavior must
+    monkeypatch ask() explicitly, as they already do."""
+
+
+class _NeutralTimeout:
+    """Attribute-compatible stand-in for httpx.Timeout (.connect/.read/.write/
+    .pool), used only when initialize_sdk=False so timeout configuration
+    stays real and inspectable without requiring httpx to be installed."""
+
+    def __init__(self, connect: float, read: float, write: float, pool: float):
+        self.connect = connect
+        self.read = read
+        self.write = write
+        self.pool = pool
+
+
+class _NeutralLimits:
+    """Attribute-compatible stand-in for httpx.Limits (see _NeutralTimeout)."""
+
+    def __init__(self, max_connections: int, max_keepalive_connections: int, keepalive_expiry: float):
+        self.max_connections = max_connections
+        self.max_keepalive_connections = max_keepalive_connections
+        self.keepalive_expiry = keepalive_expiry
+
+
+class _NeutralHttpConfig:
+    """Attribute-compatible stand-in for ibm_watsonx_ai's HttpClientConfig
+    (see _NeutralTimeout). Never passed to the real IBM SDK -- the
+    initialize_sdk=True branch always builds the real HttpClientConfig
+    instead, so this stand-in can never masquerade as SDK-backed config."""
+
+    def __init__(self, timeout, limits):
+        self.timeout = timeout
+        self.limits = limits
+
+
 class WatsonXClient:
     # IBM watsonx.ai is the only authorized paid external inference service/runtime for the AVM
     # Syndicate; IBM Granite is the model family for the recorded LIVE-003 inference (ibm/granite-4-h-small)
@@ -114,7 +161,7 @@ class WatsonXClient:
     # whether these variables were actually set.
     REQUIRED_ENV_VARS = ("WATSONX_APIKEY", "WATSONX_PROJECT_ID", "WATSONX_URL", "WATSONX_REGION")
 
-    def __init__(self, model_id: str | None = None):
+    def __init__(self, model_id: str | None = None, initialize_sdk: bool = True):
         if model_id is None:
             model_id = __import__("os").getenv("WATSONX_MODEL_ID", "ibm/granite-4-h-small")
         self.api_key = os.getenv("WATSONX_APIKEY")
@@ -126,21 +173,46 @@ class WatsonXClient:
         self.system_prompt = "You are a cognitive node of the AVM Syndicate."
         self.last_usage = None
         self.dispatch_id = None
+        self.initialize_sdk = initialize_sdk
 
-        self.creds = Credentials(api_key=self.api_key, url=self.url)
-        # IBM SDK v1.3.42 defaults to a 1,800-second read timeout. The runner
-        # itself bounds each stage at 180 seconds, but an SDK request with a
-        # much longer read timeout can outlive that stage boundary in its
-        # worker thread. Use the SDK-supported HttpClientConfig path so the
-        # provider's transport bound is explicit and remains watsonx.ai-service-only (no fallback to another inference service, no substitution of the configured model ID (ibm/granite-4-h-small) without separate authorization).
-        self.http_timeout = httpx.Timeout(
-            connect=float(os.getenv("WATSONX_CONNECT_TIMEOUT_SECONDS", "10")),
-            read=float(os.getenv("WATSONX_READ_TIMEOUT_SECONDS", "150")),
-            write=float(os.getenv("WATSONX_WRITE_TIMEOUT_SECONDS", "30")),
-            pool=float(os.getenv("WATSONX_POOL_TIMEOUT_SECONDS", "30")),
-        )
-        self.http_limits = httpx.Limits(max_connections=10, max_keepalive_connections=10, keepalive_expiry=5)
-        self.http_config = HttpClientConfig(timeout=self.http_timeout, limits=self.http_limits)
+        # Provider-neutral transport bounds, computed once regardless of
+        # initialize_sdk so timeout/limit configuration is always real and
+        # inspectable -- only the concrete class backing them differs below.
+        connect_s = float(os.getenv("WATSONX_CONNECT_TIMEOUT_SECONDS", "10"))
+        read_s = float(os.getenv("WATSONX_READ_TIMEOUT_SECONDS", "150"))
+        write_s = float(os.getenv("WATSONX_WRITE_TIMEOUT_SECONDS", "30"))
+        pool_s = float(os.getenv("WATSONX_POOL_TIMEOUT_SECONDS", "30"))
+        max_connections, max_keepalive_connections, keepalive_expiry = 10, 10, 5
+
+        if initialize_sdk:
+            if Credentials is None or APIClient is None or ModelInference is None or HttpClientConfig is None or httpx is None:
+                raise WatsonXSDKUnavailableError(
+                    "initialize_sdk=True (the default) requires ibm-watsonx-ai and httpx to be "
+                    "installed to construct a live WatsonXClient, and neither is importable in "
+                    "this environment. Pass initialize_sdk=False for offline/public-suite "
+                    "construction, which builds real provider-neutral configuration and manifest "
+                    "plumbing without the SDK -- but such a client cannot execute ask()."
+                )
+            self.creds = Credentials(api_key=self.api_key, url=self.url)
+            # IBM SDK v1.3.42 defaults to a 1,800-second read timeout. The runner
+            # itself bounds each stage at 180 seconds, but an SDK request with a
+            # much longer read timeout can outlive that stage boundary in its
+            # worker thread. Use the SDK-supported HttpClientConfig path so the
+            # provider's transport bound is explicit and remains watsonx.ai-service-only (no fallback to another inference service, no substitution of the configured model ID (ibm/granite-4-h-small) without separate authorization).
+            self.http_timeout = httpx.Timeout(connect=connect_s, read=read_s, write=write_s, pool=pool_s)
+            self.http_limits = httpx.Limits(max_connections=max_connections, max_keepalive_connections=max_keepalive_connections, keepalive_expiry=keepalive_expiry)
+            self.http_config = HttpClientConfig(timeout=self.http_timeout, limits=self.http_limits)
+        else:
+            # Offline/public-suite construction: no SDK objects are built, no
+            # credentials object exists (None, not a fake), and ask() is
+            # blocked below. Timeout/limit values are still real numbers on
+            # attribute-compatible stand-ins -- not placeholders -- so
+            # topology/config tests remain meaningful without the SDK.
+            self.creds = None
+            self.http_timeout = _NeutralTimeout(connect_s, read_s, write_s, pool_s)
+            self.http_limits = _NeutralLimits(max_connections, max_keepalive_connections, keepalive_expiry)
+            self.http_config = _NeutralHttpConfig(self.http_timeout, self.http_limits)
+
         self.default_params = {
             "temperature": 0.0,
             "max_tokens": 1500,
@@ -195,6 +267,14 @@ class WatsonXClient:
         /ml/v1/text/generation endpoint to /ml/v1/text/chat (2026-08-01).
         Native system/user roles replace the old string-sentinel siloing —
         a chat model doesn't echo the prompt back, so there's nothing to strip."""
+        if not self.initialize_sdk:
+            raise WatsonXOfflineConstructionError(
+                f"WatsonXClient for {self.current_agent!r} was constructed with "
+                "initialize_sdk=False (offline/public-suite mode) and has no live provider "
+                "attached -- ask() cannot reach IBM watsonx.ai. Monkeypatch ask() for "
+                "topology/plumbing tests, or construct with initialize_sdk=True (requires "
+                "ibm-watsonx-ai) for a real call."
+            )
         call_params = {**self.default_params, **kwargs}
         max_new = call_params.pop("max_new_tokens", None)
         call_params.pop("decoding_method", None)

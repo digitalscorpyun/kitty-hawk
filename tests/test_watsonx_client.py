@@ -131,16 +131,45 @@ def main() -> None:
     # fallback function itself, still holds after this change. ---
     check(wc.REQUIRED_VARS == ["WATSONX_APIKEY", "WATSONX_PROJECT_ID", "WATSONX_URL", "WATSONX_REGION"], "REQUIRED_VARS changed shape")
 
-    # --- KH-03 provider-boundary hardening: the IBM SDK's supported HTTPX
-    # configuration is explicit, bounded, and does not disable TLS verification
-    # or substitute another provider. Construction is offline; ask() is never
-    # called here. ---
-    client = wc.WatsonXClient()
+    # --- KH-03 provider-boundary hardening: bounded transport configuration
+    # is explicit and does not disable TLS verification or substitute another
+    # provider. This constructs the REAL WatsonXClient class and REAL
+    # manifest/provider plumbing through the explicit offline seam
+    # (initialize_sdk=False) -- it does not claim real IBM SDK object
+    # construction, which initialize_sdk=False deliberately skips. ask() is
+    # never called here. ---
+    client = wc.WatsonXClient(initialize_sdk=False)
+    check(client.initialize_sdk is False, "offline-constructed client did not record initialize_sdk=False")
+    check(client.creds is None, "offline-constructed client fabricated a credentials object instead of leaving it None")
     check(client.http_timeout.connect == 10.0, "watsonx connect timeout is not explicitly bounded at 10 seconds")
     check(client.http_timeout.read == 150.0, "watsonx read timeout is not explicitly bounded at 150 seconds")
     check(client.http_timeout.write == 30.0 and client.http_timeout.pool == 30.0, "watsonx write/pool timeouts are not explicitly bounded at 30 seconds")
-    check(client.http_config.timeout == client.http_timeout, "HttpClientConfig does not carry the configured timeout")
-    check(client.http_config.limits == client.http_limits, "HttpClientConfig does not carry the configured connection limits")
+    check(client.http_config.timeout is client.http_timeout, "HttpClientConfig does not carry the configured timeout")
+    check(client.http_config.limits is client.http_limits, "HttpClientConfig does not carry the configured connection limits")
+
+    # --- Fail-closed, not fail-silent: an offline-constructed client that
+    # reaches an unpatched ask() must raise, never silently no-op or return a
+    # fabricated response, and must never touch the network to find out. ---
+    try:
+        client.ask("this must never reach a provider")
+        check(False, "ask() on an offline-constructed (initialize_sdk=False) client did not raise")
+    except wc.WatsonXOfflineConstructionError:
+        check(True, "ask() on an offline-constructed client correctly raised WatsonXOfflineConstructionError")
+
+    # --- The default, production construction path (initialize_sdk=True)
+    # must itself fail closed with a clear, intelligible error when the IBM
+    # SDK is not installed -- never a bare TypeError from a None SDK class,
+    # and never a silent substitute provider. This environment has no
+    # ibm-watsonx-ai installed (public offline dependency set), so this
+    # exercises the real absent-SDK path, not a simulation of it. ---
+    if wc.Credentials is None:
+        try:
+            wc.WatsonXClient()
+            check(False, "default construction (initialize_sdk=True) did not raise with the IBM SDK absent")
+        except wc.WatsonXSDKUnavailableError:
+            check(True, "default construction correctly raised WatsonXSDKUnavailableError with the IBM SDK absent")
+    else:
+        print("NOTE: ibm-watsonx-ai is installed in this environment -- the absent-SDK fail-closed path is not exercised here.")
 
     print(f"All {checks} watsonx_client checks passed.")
 

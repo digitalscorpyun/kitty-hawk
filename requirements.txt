@@ -1,7 +1,7 @@
 # Kitty Hawk — minimal offline + optional live
-# Offline demo needs only stdlib + pytz (for now_iso)
+# Offline demo needs stdlib + pytz (for now_iso) + PyYAML (syndicate_router seat config)
 pytz
+PyYAML>=6.0,<7
 # Live watsonx (optional) — uncomment to run live bounded validation
 # ibm-watsonx-ai>=1.6.0
-# PyYAML
 # httpx

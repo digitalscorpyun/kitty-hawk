@@ -1,9 +1,12 @@
 """Offline acceptance checks for mission_citation_fabrication.py. Zero live
 provider calls: every seat is either monkeypatched via the `clients`
-injection seam, or exercised through the REAL WatsonXClient class (real
-construction, real manifest loading) with only WatsonXClient.ask() itself
+injection seam, or exercised through the real WatsonXClient adapter class and
+real manifest/provider plumbing (constructed via the explicit
+initialize_sdk=False offline seam -- not real IBM SDK object construction,
+which that seam deliberately skips) with only WatsonXClient.ask() itself
 scripted -- so the mission's actual provider-identity/manifest-identity
-plumbing is proven correct without ever reaching the network."""
+plumbing is proven correct without ever reaching the network or requiring
+ibm-watsonx-ai to be installed."""
 from __future__ import annotations
 
 import hashlib
@@ -309,12 +312,16 @@ def main() -> None:
     check(len(failure_result.stages) == 2, "mission did not stop immediately after the failing stage")
     check(not failing_clients["CG-SCRIBE"].ask_calls and not failing_clients["OD-COMPLY"].ask_calls, "later stages ran despite an earlier in-flight failure")
 
-    # --- Real substrate proof: construct the REAL WatsonXClient for every
-    # stage (no `clients` override at all), with only WatsonXClient.ask()
-    # itself scripted so no network call is made. Proves all four mission
-    # stages genuinely share one provider class while loading distinct,
-    # correct canonical manifests via the real set_agent(). Scripted text is
-    # well-formed per seat so it also clears the new deterministic gates. ---
+    # --- Real substrate proof: construct the REAL WatsonXClient class for
+    # every stage (no `clients` override at all), through the explicit
+    # offline seam (initialize_sdk=False), with only WatsonXClient.ask()
+    # itself scripted so no network call is made and no IBM SDK object is
+    # ever constructed. This proves the real adapter class and real
+    # manifest/provider plumbing -- all four mission stages genuinely share
+    # one provider class while loading distinct, correct canonical manifests
+    # via the real set_agent() -- not real IBM SDK construction, which
+    # initialize_sdk=False deliberately skips. Scripted text is well-formed
+    # per seat so it also clears the deterministic gates. ---
     seen_agents: list[str] = []
 
     def _scripted_watsonx_ask(self, prompt, **kwargs):
@@ -327,7 +334,19 @@ def main() -> None:
             return WELL_FORMED_CLIENT_FACING_TEXT
         return f"SCRIPTED-OUTPUT-FOR-{self.current_agent}"
 
+    # Force initialize_sdk=False for every real WatsonXClient this mission
+    # constructs -- proves the real adapter class, real timeout/limit
+    # configuration, and real manifest/seat-name plumbing without requiring
+    # the IBM SDK to be installed in the public offline environment. Only
+    # __init__'s default and ask() are touched; SEAT_PROVIDER identity
+    # (WatsonXClient itself) is never substituted.
+    original_watsonx_init = sr.WatsonXClient.__init__
+
+    def _offline_init(self, model_id=None, initialize_sdk=True):  # noqa: ARG001 - signature must match real __init__
+        original_watsonx_init(self, model_id=model_id, initialize_sdk=False)
+
     original_watsonx_ask = sr.WatsonXClient.ask
+    sr.WatsonXClient.__init__ = _offline_init
     sr.WatsonXClient.ask = _scripted_watsonx_ask
     try:
         real_result = mcf.run_mission(SAMPLE_RECEIPTS, mission_id="TEST-REAL-SUBSTRATE", authorize_live=True)
@@ -340,6 +359,7 @@ def main() -> None:
         check(real_result.client_facing_response == WELL_FORMED_CLIENT_FACING_TEXT, "real-substrate CG-SCRIBE output was not carried through as the client-facing response")
         check(real_result.schema_valid is True, "real-substrate mission's well-formed output failed schema validation")
     finally:
+        sr.WatsonXClient.__init__ = original_watsonx_init
         sr.WatsonXClient.ask = original_watsonx_ask
 
     # --- Evidence lands only in the Forge, never the Vault, and captures
