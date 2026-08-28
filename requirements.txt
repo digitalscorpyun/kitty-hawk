@@ -1,0 +1,7 @@
+# Kitty Hawk — minimal offline + optional live
+# Offline demo needs only stdlib + pytz (for now_iso)
+pytz
+# Live watsonx (optional) — uncomment to run live bounded validation
+# ibm-watsonx-ai>=1.6.0
+# PyYAML
+# httpx

@@ -1,0 +1,134 @@
+# Kitty Hawk — Governed Agentic Reliability Workflow
+
+**Portfolio project by digitalscorpyun (Michael Kibbe) — AVM Syndicate, 2026**
+**Status:** Offline reproducer ready (live bounded validation 003 passed, portfolio-ready)
+
+> Kitty Hawk is a governed 4-seat agentic workflow for AI citation-integrity incidents — when an AI research system fabricates a citation like *Acme v. Beta, 123 F.4th 456 (9th Cir. 2024)*. It intake-validates versioned evidence packets, verifies `content_sha256` receipt lineage (2 receipts → 1 event via explicit `event_id`), runs deterministic reliability gates (citation / scenario-fidelity / unsupported-number), and halts invalid packets **before any provider call** (`halted_invalid_evidence_packet`, `ask_calls == []`). Every report is `vault_writeback: null`, `not_reviewed / not_authorized`, with explicit human-review escalation. Built for IBM watsonx.ai with IBM Granite (TLS verified for the watsonx.ai service connection, no fallback, `authorize_live=False` with `FakeClient` offline — offline demo makes zero external inference-service calls and therefore no Granite inference), verified by 277 mission + 14 watsonx.ai-service offline checks, semantic determinism scoped. One command reproduces. Live transport to the watsonx.ai service (KH-03 `SSL: UNEXPECTED_EOF` during watsonx.ai request) and 6 controls remain `NOT_YET_MODELED` by design — documented limits, not hidden debt.
+
+## One-Command Reproducer (no credentials, no live watsonx.ai inference)
+
+```bash
+# From repo root — requires Python 3.10+ and pytz (see requirements.txt)
+# Windows: chcp 65001 > /dev/null  (UTF-8 console for ✶)
+PYTHONUTF8=1 python -X utf8 demo/kitty_hawk_offline_demo.py
+# Expected: VALID CASE: PASS, NEGATIVE CASE: PASS, Determinism: semantic PASS
+```
+
+Or with conda env `wx310` (as used in Forge, internal path redacted):
+```bash
+chcp 65001 > /dev/null
+PYTHONUTF8=1 python -X utf8 demo/kitty_hawk_offline_demo.py
+# Forge verified with Python 3.10.19 (wx310, internal path redacted)
+```
+
+What it does:
+- **Valid:** `CASE-KITTY-HAWK-DEMO-001` (2 synthetic receipts `RCPT-SAN-001/002` → 1 event `EVT-SAN-CITATION-001`) → normalization → 4-seat chain `ECHO-PROPHET → CONTEXTUAL-CATALYST → CG-SCRIBE → OD-COMPLY` via `FakeClient` → `execution_complete`, human-review boundary asserted
+- **Negative:** hash-mismatch `RCPT-SAN-NEG-001` (`00…0`) and malformed packet → `halted_invalid_evidence_packet`, 0 stages, **zero provider calls** (`ask_calls == []` for all 4 seats)
+- **Legacy:** `legacy-list` `[ {source,content}×2 ]` → `execution_complete_with_gate_findings` preserved
+
+## Tests (offline)
+
+```bash
+PYTHONUTF8=1 python -X utf8 tests/test_mission_citation_fabrication.py
+# All 277 mission_citation_fabrication checks passed.
+
+PYTHONUTF8=1 python -X utf8 tests/test_watsonx_client.py
+# All 14 watsonx.ai-service client checks passed.
+```
+
+No live watsonx.ai inference-service call (and therefore no Granite inference), no `.env`, no `verify=False`, no fallback.
+
+## Architecture
+
+```
+Evidence packet (1.0 + receipts with content_sha256)
+  → _validate (hash, schema, case_id, severity, version)
+  → receipt/event lineage (explicit event_id only)
+  → run_mission(clients=FakeClient/WatsonXClient [watsonx.ai service client], authorize_live)  # WatsonXClient -> watsonx.ai -> Granite model
+    → ECHO-PROPHET → [citation + scenario-fidelity gates]
+    → CONTEXTUAL-CATALYST → [unsupported-number + scenario-fidelity gates]
+    → CG-SCRIBE → OD-COMPLY
+  → Customer Success report (_debug/mission_citation_fabrication/*.json/.md)
+     receipt ledger, per-seat traces, gate findings, Human review required
+```
+
+**External inference boundary (operator ruling 2026-08-23):** IBM watsonx.ai is the authorized external inference service/runtime; IBM Granite is the model family used for the recorded LIVE-003 inference (`ibm/granite-4-h-small`). `syndicate_router.SEAT_PROVIDER` maps all 4 seats to `WatsonXClient` (client for the watsonx.ai service); seats are governed identities distinguished by manifest, not vendor bindings. `FakeClient` in offline demo uses identical seam (`set_agent`, `ask`) with no network and therefore no Granite inference.
+
+## Project Structure
+
+```
+kitty-hawk/
+├── demo/kitty_hawk_offline_demo.py   # canonical reproducer (21K, offline)
+├── core/                             # engine + router + watsonx bridge
+│   ├── mission_citation_fabrication.py
+│   ├── syndicate_router.py
+│   ├── provider_protocol.py
+│   └── watsonx_client.py
+├── tests/                            # 277 + 14 offline checks
+├── docs/
+│   ├── KITTY_HAWK_CORRECTIONS_REPORT_20260827.md
+│   ├── KITTY_HAWK_LIVE_VALIDATION_003_REPORT_20260827.md
+│   └── FORGE_AAR_20260828.md
+├── examples/                         # pre-generated reports (JSON + MD)
+│   ├── KITTY-HAWK-DEMO-VALID-001.json/.md
+│   └── CASE-KITTY-HAWK-LIVE-003.json/.md
+└── requirements.txt
+```
+
+## Glossary
+
+A few terms appear in the evidence output (`examples/*.md`, `examples/*.json`) that
+come from this project's human-governance schema, not from the code's runtime
+behavior:
+
+- **`VS-ENC`** — a human-governed review/acceptance role in the workflow this project
+  demonstrates. It is not an autonomous agent and does not act on its own; every
+  record explicitly marks itself `not_reviewed` until a human performs that review.
+- **`Customer Success`** — a downstream acceptance state represented in the evidence
+  schema (the report format the mission engine writes). Its presence in a report is
+  not proof that any customer has approved that run.
+- **`acceptance` / `authorization`** — explicit human-governance states, distinct from
+  technical execution. A mission reaching `execution_complete` means its stages ran;
+  it does not mean a human has accepted or authorized the result.
+
+## Live Bounded Validation — Historical Evidence Only
+
+Bounded live validation (CASE-KITTY-HAWK-LIVE-003) was executed in the internal Forge with synthetic data only (TLS verified, ≤4 requests, ≤120s, no Vault writeback). No live call is required for portfolio evaluation — the offline reproducer is the primary signal.
+
+> **Disclaimer:** LIVE-003 is bounded-execution evidence only; not VS-ENC acceptance, not operator authorization, not Customer Success acceptance, not public-release readiness. See `docs/KITTY_HAWK_LIVE_VALIDATION_003_REPORT_20260827.md`.
+
+Outcome (2026-08-27): **PASSED — BOUNDED** — 4/4 seats invoked Granite `ibm/granite-4-h-small` through IBM watsonx.ai, 27s, 3,526 tokens, TLS verified for the watsonx.ai service connection. Evidence in `docs/KITTY_HAWK_LIVE_VALIDATION_003_REPORT_20260827.md` and `examples/CASE-KITTY-HAWK-LIVE-003.*` (historical, not a public runnable).
+
+## Limitations (NOT_YET_MODELED — explicit, not hidden)
+
+Temporal windows, evidence-sufficiency transitions, mandatory escalation, declared `packet_sha256` verification (computed only), semantic entailment, broader lineage beyond `CLAIM_RECEIPT_MISSING`/`CROSS_CASE_*`/`PROVENANCE_*`, authorization budget. Live TLS for the watsonx.ai service connection was hardened offline (`HttpClientConfig` 10/150/30) but live-unverified until 003. Byte-for-byte artifact determinism not claimed (`timestamp`/`dispatch_id` differ by design); semantic determinism (status/gates/schema/response/lineage) is asserted.
+
+## Why This Is Portfolio-Worthy
+
+Not a chatbot — a reliability layer that stops a chatbot from hallucinating citations and proves it halted before calling the model. Shows: intake validation, hash-verified lineage, deterministic gates, human-review enforcement, and honest scope limits. Portfolio framing and AAR in `docs/`.
+
+---
+*Teams are from the same truck. This repository is a curated portfolio extract of the author's private development work.*
+
+---
+## Evidence and Validation State
+
+Full evidence detail — what has been observed, on which platform, and what remains
+unobserved — lives in [`docs/EVIDENCE.md`](docs/EVIDENCE.md). In summary:
+
+- The one-command offline demo and both offline test suites have been observed
+  passing on Linux. Native Windows results, where established, are recorded in this
+  repository's own commit history and CI runs rather than restated here, to avoid
+  this file going stale.
+- A historical internal validation run (outside this repository) recorded 277
+  mission-engine checks and 14 watsonx-client checks passing on Windows against a
+  larger private fixture set. This public repository does not treat that historical
+  record as a substitute for independently observed results from its own, smaller
+  public fixture set — see `docs/EVIDENCE.md` for what this repository's own checks
+  actually cover.
+- **Python version:** the code targets Python 3.10+. The GitHub Actions workflow
+  (`.github/workflows/kitty-hawk-offline.yml`) currently validates against Python
+  3.11 specifically — that is the floor this repository's CI actually exercises.
+- GitHub-hosted CI (both `ubuntu-latest` and `windows-latest`) is configured but
+  **not yet observed** — it becomes evidence only once a workflow run has actually
+  executed on GitHub, not merely because it is configured to run.

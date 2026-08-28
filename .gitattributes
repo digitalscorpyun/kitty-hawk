@@ -1,0 +1,16 @@
+# Normalize text files to LF in the repository; Git still checks out with
+# the platform-appropriate line ending unless a file type is pinned below.
+* text=auto eol=lf
+
+*.py text
+*.md text
+*.yml text
+*.yaml text
+*.json text
+*.txt text
+
+# Binary — never subject to line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary

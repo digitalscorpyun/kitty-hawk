@@ -1,0 +1,58 @@
+{
+  "fixture_set_id": "KITTY-HAWK-WP3-20260827",
+  "packet_version": "1.0",
+  "content_encoding": "UTF-8",
+  "normalization": "none",
+  "baseline": {
+    "fixture_id": "WP3-BASELINE-VALID-001",
+    "description": "Valid version 1.0 packet with two receipts corroborating one explicit event.",
+    "expected_disposition": "accept_preflight",
+    "severity": "medium"
+  },
+  "packet_structure": [
+    {"fixture_id":"WP3-PACKET-MISSING-001","defect":"missing packet entirely","finding_code":"PACKET_TOP_LEVEL_TYPE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-EMPTY-001","defect":"empty mapping","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-TYPE-LIST-001","defect":"legacy list input","finding_code":"LEGACY_COMPATIBLE","expected_disposition":"accept_legacy","severity":"none"},
+    {"fixture_id":"WP3-PACKET-TYPE-STRING-001","defect":"wrong top-level string type","finding_code":"PACKET_TOP_LEVEL_TYPE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-TYPE-INTEGER-001","defect":"wrong top-level integer type","finding_code":"PACKET_TOP_LEVEL_TYPE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-TYPE-NULL-001","defect":"wrong top-level null type","finding_code":"PACKET_TOP_LEVEL_TYPE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-VERSION-MISSING-001","defect":"missing packet_version","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-VERSION-UNSUPPORTED-001","defect":"unsupported packet version","finding_code":"PACKET_UNSUPPORTED_VERSION","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-CASE-MISSING-001","defect":"missing case identity","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-CASE-MALFORMED-001","defect":"malformed case ID","finding_code":"PACKET_CASE_ID_INVALID","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-SEVERITY-MISSING-001","defect":"missing severity","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-SEVERITY-INVALID-001","defect":"unsupported severity value","finding_code":"PACKET_SEVERITY_INVALID","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-BOUNDARY-MISSING-001","defect":"missing incident boundary","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-SCOPE-MISSING-001","defect":"missing verification scope","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-PROVENANCE-MISSING-001","defect":"missing provenance classification","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-SUFFICIENCY-MISSING-001","defect":"missing evidence sufficiency","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-UNCERTAINTY-MISSING-001","defect":"missing uncertainty field","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"medium"},
+    {"fixture_id":"WP3-PACKET-ESCALATION-MISSING-001","defect":"missing escalation conditions","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"medium"},
+    {"fixture_id":"WP3-PACKET-RECEIPTS-MISSING-001","defect":"missing receipts collection","finding_code":"PACKET_MISSING_FIELD","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-PACKET-RECEIPTS-TYPE-001","defect":"receipts collection wrong type","finding_code":"PACKET_RECEIPTS_TYPE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-ITEM-TYPE-001","defect":"receipt item wrong type","finding_code":"RECEIPT_ITEM_TYPE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-ID-DUPLICATE-001","defect":"duplicate receipt identifiers","finding_code":"RECEIPT_ID_DUPLICATE","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-ID-EMPTY-001","defect":"empty receipt identifier","finding_code":"RECEIPT_ID_INVALID","expected_disposition":"reject_pre_dispatch","severity":"high"}
+  ],
+  "receipt_integrity": [
+    {"fixture_id":"WP3-RECEIPT-CONTENT-MISSING-001","defect":"missing content","finding_code":"RECEIPT_FIELD_INVALID","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-CONTENT-EMPTY-001","defect":"empty content","finding_code":"RECEIPT_FIELD_INVALID","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-SOURCE-MISSING-001","defect":"missing source/provenance","finding_code":"RECEIPT_FIELD_INVALID","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-HASH-MISSING-001","defect":"missing content hash","finding_code":"RECEIPT_HASH_MISSING","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-HASH-ALGORITHM-001","defect":"unsupported hash algorithm","finding_code":"RECEIPT_HASH_ALGORITHM","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-HASH-MATCH-001","defect":"declared SHA-256 matches content","finding_code":"NONE","expected_disposition":"accept_preflight","severity":"none"},
+    {"fixture_id":"WP3-RECEIPT-HASH-MISMATCH-001","defect":"declared hash differs from recomputed SHA-256","finding_code":"RECEIPT_HASH_MISMATCH","expected_disposition":"reject_pre_dispatch","severity":"critical"},
+    {"fixture_id":"WP3-RECEIPT-HASH-FORMAT-001","defect":"hash wrong length or encoding","finding_code":"RECEIPT_HASH_FORMAT","expected_disposition":"reject_pre_dispatch","severity":"high"},
+    {"fixture_id":"WP3-RECEIPT-EVENT-ID-MISSING-001","defect":"event ID absent; remains standalone under current contract","finding_code":"NONE","expected_disposition":"accept_as_standalone","severity":"medium"},
+    {"fixture_id":"WP3-RECEIPT-PROVENANCE-CONTRADICTORY-001","defect":"contradictory provenance metadata","finding_code":"NOT_YET_MODELED","expected_disposition":"requires_future_cross_object_gate","severity":"medium"}
+  ],
+  "cross_object_lineage": [
+    {"fixture_id":"WP3-LINEAGE-SAME-TEXT-DIFFERENT-EVENT-001","defect":"same text with different explicit event IDs","finding_code":"EXPLICIT_EVENT_ID_ONLY","expected_disposition":"preserve_as_distinct_events","severity":"medium"},
+    {"fixture_id":"WP3-LINEAGE-SIMILAR-TEXT-NO-ID-001","defect":"similar text with no event ID","finding_code":"EXPLICIT_EVENT_ID_ONLY","expected_disposition":"preserve_as_standalone_events","severity":"medium"},
+    {"fixture_id":"WP3-LINEAGE-DUPLICATE-CONTENT-IDS-001","defect":"duplicate content with different receipt IDs","finding_code":"NOT_YET_MODELED","expected_disposition":"requires_future_cross_object_gate","severity":"medium"},
+    {"fixture_id":"WP3-LINEAGE-CLAIM-MISSING-RECEIPT-001","defect":"claim references absent receipt","finding_code":"NOT_YET_MODELED","expected_disposition":"requires_future_output_lineage_gate","severity":"high"},
+    {"fixture_id":"WP3-LINEAGE-PACKET-HASH-MUTATION-001","defect":"packet hash changes after mutation","finding_code":"PACKET_HASH_RECOMPUTED","expected_disposition":"detect_on_revalidation","severity":"high"},
+    {"fixture_id":"WP3-LINEAGE-INSUFFICIENT-001","defect":"explicitly insufficient evidence state","finding_code":"NOT_YET_MODELED","expected_disposition":"requires_future_sufficiency_gate","severity":"high"},
+    {"fixture_id":"WP3-LINEAGE-ESCALATION-001","defect":"unresolved uncertainty with mandatory escalation","finding_code":"NOT_YET_MODELED","expected_disposition":"requires_future_escalation_gate","severity":"high"}
+  ]
+}

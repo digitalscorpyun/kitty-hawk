@@ -1,0 +1,120 @@
+{
+  "mission_id": "KITTY-HAWK-DEMO-VALID-001",
+  "created_at": "2026-08-27T17:15:52-07:00",
+  "receipts": [
+    {
+      "receipt_id": "RCPT-SAN-001",
+      "source": "synthetic_audit_log_20260827.md#finding-01",
+      "content": "Synthetic audit: AI synthesis output cited 'Acme v. Beta, 123 F.4th 456 (9th Cir. 2024)' which does not resolve in the reporter.",
+      "content_sha256": "909d235d1662389ffd244d982a368006932fb4d70e92db5d3fdedb78e063d1a3",
+      "captured_at": "2026-08-27T17:15:52-07:00",
+      "event_id": "EVT-SAN-CITATION-001"
+    },
+    {
+      "receipt_id": "RCPT-SAN-002",
+      "source": "synthetic_workspace_transcript_20260827.md#excerpt-01",
+      "content": "Synthetic workspace transcript: 'See Acme v. Beta, 123 F.4th 456 (9th Cir. 2024), holding that...'",
+      "content_sha256": "7c5eecf6a95cba4b530972c65247043b8d2b0f1ff295f7de10050f786986d46e",
+      "captured_at": "2026-08-27T17:15:52-07:00",
+      "event_id": "EVT-SAN-CITATION-001"
+    }
+  ],
+  "stages": [
+    {
+      "mission_id": "KITTY-HAWK-DEMO-VALID-001",
+      "seat": "ECHO-PROPHET",
+      "provider": "FakeClient",
+      "model_id": "OFFLINE-DEMO-MODEL",
+      "input_artifact_hash": "cf671850b21c88db327cd5df9e2d0b37193cac9ed786943a57bfa302a5624927",
+      "output_artifact_hash": "5ffc22aa68701ee23f1d02ad5836569e29157ff65540772cec5eafd3675d4664",
+      "dispatch_id": "ECHO-PROPHET:9ebe8d41",
+      "timestamp": "2026-08-27T17:15:52-07:00",
+      "source_receipt_refs": [
+        "RCPT-SAN-001",
+        "RCPT-SAN-002"
+      ],
+      "outcome": "executed",
+      "reason": "Stage executed.",
+      "output_text": "VERIFIED FACTS:\n- The workspace output cites 'Acme v. Beta, 123 F.4th 456 (9th Cir. 2024)' (RCPT-SAN-002).\n- The audit notes this citation does not resolve in any reporter (RCPT-SAN-001).\n\nREPORTED CLAIMS:\n- Synthetic claim that the citation is fabricated.\n\nINFERENCES:\n- The workspace may have hallucinated the citation.\n\nUNRESOLVED QUESTIONS:\n- Whether this is a one-off or a repeated pattern."
+    },
+    {
+      "mission_id": "KITTY-HAWK-DEMO-VALID-001",
+      "seat": "CONTEXTUAL-CATALYST",
+      "provider": "FakeClient",
+      "model_id": "OFFLINE-DEMO-MODEL",
+      "input_artifact_hash": "9e1f2f2f5d08a40f0272fc4d88408e1b9a04ff82dc32985aef1d0a7b0a93108c",
+      "output_artifact_hash": "38569404b15052e9e6ef111b6948e79e9c2f132310435d59833bb4b5a61978bc",
+      "dispatch_id": "CONTEXTUAL-CATALYST:b3e8db37",
+      "timestamp": "2026-08-27T17:15:52-07:00",
+      "source_receipt_refs": [
+        "RCPT-SAN-001",
+        "RCPT-SAN-002"
+      ],
+      "outcome": "executed",
+      "reason": "Stage executed.",
+      "output_text": "FAILURE MECHANISM:\n- Ungrounded generation / hallucinated source. Well-supported by the receipts.\n\nESCALATION CRITERIA:\n- Escalate on repeat occurrence after a prior fix, or on regulatory exposure, per operator policy."
+    },
+    {
+      "mission_id": "KITTY-HAWK-DEMO-VALID-001",
+      "seat": "CG-SCRIBE",
+      "provider": "FakeClient",
+      "model_id": "OFFLINE-DEMO-MODEL",
+      "input_artifact_hash": "fa978047016f5f6f60074eea0b0f9231e9d2e0c110ca7387cd9f708af8e180ef",
+      "output_artifact_hash": "8eff840a4b4f7f054d534c1b2bc14454dface90dee513499b4e7ee0c13856973",
+      "dispatch_id": "CG-SCRIBE:04119d03",
+      "timestamp": "2026-08-27T17:15:52-07:00",
+      "source_receipt_refs": [
+        "RCPT-SAN-001",
+        "RCPT-SAN-002"
+      ],
+      "outcome": "executed",
+      "reason": "Stage executed.",
+      "output_text": "WHAT WE VERIFIED:\nThe synthetic citation does not resolve in the reporter.\n\nWHAT REMAINS UNCERTAIN:\nWhether this is a one-off.\n\nNEXT STEPS:\nWe are reviewing the underlying synthetic workspace session with human review."
+    },
+    {
+      "mission_id": "KITTY-HAWK-DEMO-VALID-001",
+      "seat": "OD-COMPLY",
+      "provider": "FakeClient",
+      "model_id": "OFFLINE-DEMO-MODEL",
+      "input_artifact_hash": "cb45e697e0a8f9f50ebf2ff04337292ea6f29852b6fd9acb9f95672cdb56f8fc",
+      "output_artifact_hash": "7a61ac0e2354f12b9e696e8b3fd68a36e916d86d25cb50dd07f57679153d49a8",
+      "dispatch_id": "OD-COMPLY:95b3679a",
+      "timestamp": "2026-08-27T17:15:52-07:00",
+      "source_receipt_refs": [
+        "RCPT-SAN-001",
+        "RCPT-SAN-002"
+      ],
+      "outcome": "executed",
+      "reason": "Stage executed.",
+      "output_text": "PASS: WHAT WE VERIFIED:\nPASS: WHAT REMAINS UNCERTAIN:\nPASS: NEXT STEPS:"
+    }
+  ],
+  "client_facing_response": "WHAT WE VERIFIED:\nThe synthetic citation does not resolve in the reporter.\n\nWHAT REMAINS UNCERTAIN:\nWhether this is a one-off.\n\nNEXT STEPS:\nWe are reviewing the underlying synthetic workspace session with human review.",
+  "od_comply_notes": "PASS: WHAT WE VERIFIED:\nPASS: WHAT REMAINS UNCERTAIN:\nPASS: NEXT STEPS:",
+  "schema_valid": true,
+  "schema_findings": [],
+  "status": "execution_complete",
+  "vs_enc_review_status": "not_reviewed",
+  "operator_authorization_status": "not_authorized",
+  "vault_writeback": null,
+  "gate_findings": [],
+  "packet_metadata": {
+    "packet_version": "1.0",
+    "case_id": "CASE-KITTY-HAWK-DEMO-001",
+    "severity": "medium",
+    "customer_impact": "Synthetic: potentially misleading research output with fabricated citation.",
+    "affected_workflow": "AI-assisted research synthesis (synthetic)",
+    "incident_boundary": "One bounded synthetic citation-reliability incident.",
+    "verification_scope": "Receipt content and source comparison only (synthetic).",
+    "provenance_classification": "synthetic-and-audited",
+    "evidence_sufficiency": "sufficient-for-triage",
+    "uncertainty": [
+      "Independent source confirmation remains synthetic."
+    ],
+    "escalation_conditions": [
+      "Escalate if synthetic pattern repeats."
+    ],
+    "schema_status": "valid",
+    "packet_sha256": "12db6481a47da8495c36576f024ebb2eb6d18235f3e10528bbec2babdeee786b"
+  }
+}
