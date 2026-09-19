@@ -53,6 +53,22 @@ from watsonx_client import WatsonXClient  # noqa: E402
 import watsonx_ping  # noqa: E402  (reuses the bounded M1 tool + one-call boundary)
 from rag.store import RagStore  # noqa: E402
 from rag.corpus import load_controlled_corpus  # noqa: E402
+from trace import Tracer  # noqa: E402  (M5 -- optional, no-op when not supplied)
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def _maybe_span(tracer: "Tracer | None", name: str, **attrs):
+    """Yields a real Span if a Tracer was supplied, otherwise a no-op --
+    M4's behavior and its 20 existing tests are unaffected when tracer=None,
+    since nothing about the loop's control flow depends on this context
+    manager's yielded value."""
+    if tracer is None:
+        yield None
+    else:
+        with tracer.span(name, **attrs) as s:
+            yield s
 
 MAX_ITERATIONS = 3
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -142,6 +158,7 @@ def run_agent_loop(
     rag_store: RagStore | None = None,
     max_iterations: int = MAX_ITERATIONS,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    tracer: "Tracer | None" = None,
 ) -> dict[str, Any]:
     """M4 entry: goal -> bounded Observe->Reason->Act->Observe loop -> result dict.
 
@@ -159,6 +176,13 @@ def run_agent_loop(
     return value, not exceptions. Still raises ValueError for a goal that
     is empty, and for malformed step JSON the model itself cannot recover
     from (distinct from an allowlist violation, which the model chose).
+
+    M5 addition (backward-compatible): an optional `tracer` records one
+    `agent_iteration` span per loop iteration, with `model_call`,
+    `validate_step`, and (when a tool runs) `tool:<action>` child spans --
+    the exact tree an HTTP status code cannot show. Omitting `tracer`
+    (the default) reproduces M4's original behavior exactly; none of the
+    20 M4 tests pass a tracer and all still pass unchanged.
     """
     if not goal or not goal.strip():
         raise ValueError("goal must be non-empty")
@@ -190,37 +214,51 @@ def run_agent_loop(
                 termination = TERMINATION_TIMEOUT
                 break
 
-            prompt = _build_prompt(goal.strip(), trajectory)
-            raw = c.ask(prompt)
+            with _maybe_span(tracer, "agent_iteration", iteration=iteration) as iter_span:
+                prompt = _build_prompt(goal.strip(), trajectory)
+                with _maybe_span(tracer, "model_call", prompt_chars=len(prompt)):
+                    raw = c.ask(prompt)
 
-            # The ask() call itself may have consumed the whole budget --
-            # check immediately, before trusting or acting on its result,
-            # regardless of what action the model chose. A model that
-            # finalizes on a call that ran over budget still timed out.
-            if time.monotonic() - start >= timeout_seconds:
-                termination = TERMINATION_TIMEOUT
+                # The ask() call itself may have consumed the whole budget --
+                # check immediately, before trusting or acting on its result,
+                # regardless of what action the model chose. A model that
+                # finalizes on a call that ran over budget still timed out.
+                if time.monotonic() - start >= timeout_seconds:
+                    termination = TERMINATION_TIMEOUT
+                    iterations_used = iteration
+                    if iter_span is not None:
+                        iter_span.attributes["termination"] = TERMINATION_TIMEOUT
+                    break
+
+                try:
+                    with _maybe_span(tracer, "validate_step"):
+                        step = _parse_step(raw)
+                except DisallowedActionError:
+                    termination = TERMINATION_DISALLOWED_ACTION
+                    iterations_used = iteration
+                    if iter_span is not None:
+                        iter_span.attributes["termination"] = TERMINATION_DISALLOWED_ACTION
+                    break
+
                 iterations_used = iteration
-                break
 
-            try:
-                step = _parse_step(raw)
-            except DisallowedActionError:
-                termination = TERMINATION_DISALLOWED_ACTION
-                iterations_used = iteration
-                break
+                if step["action"] == ACTION_FINAL:
+                    answer = step["action_input"]
+                    step["observation"] = "(terminal step -- no tool executed)"
+                    trajectory.append(step)
+                    termination = TERMINATION_SUCCESS
+                    if iter_span is not None:
+                        iter_span.attributes["action"] = ACTION_FINAL
+                    break
 
-            iterations_used = iteration
-
-            if step["action"] == ACTION_FINAL:
-                answer = step["action_input"]
-                step["observation"] = "(terminal step -- no tool executed)"
+                with _maybe_span(tracer, f"tool:{step['action']}", action_input=step["action_input"]) as tool_span:
+                    observation = _execute_tool(step["action"], step["action_input"], rag_store=store)
+                    if tool_span is not None:
+                        tool_span.attributes["observation_chars"] = len(observation)
+                step["observation"] = observation
                 trajectory.append(step)
-                termination = TERMINATION_SUCCESS
-                break
-
-            observation = _execute_tool(step["action"], step["action_input"], rag_store=store)
-            step["observation"] = observation
-            trajectory.append(step)
+                if iter_span is not None:
+                    iter_span.attributes["action"] = step["action"]
 
             if time.monotonic() - start >= timeout_seconds:
                 termination = TERMINATION_TIMEOUT

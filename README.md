@@ -40,14 +40,57 @@ PYTHONUTF8=1 python -X utf8 tests/test_watsonx_client.py
 
 No live watsonx.ai inference-service call (and therefore no Granite inference), no `.env`, no `verify=False`, no fallback.
 
-## Extending the Reliability Pattern — M1–M4 (Agentic Systems Trajectory)
+## Extending the Reliability Pattern — M1–M5 (Agentic Systems Trajectory)
 
 A second, newer track in this repository extends the same evidence-first
 discipline from the citation-reliability workflow above into a general
 agentic-systems build sequence: **M1 provider boundary → M2 evaluation
 baseline → M3 retrieval/context construction → M4 bounded agent/tool loop →
-M5 FastAPI+MLflow observability → M6 production/deployment.** M1–M4 are built;
-M5–M6 are not started.
+M5 FastAPI+observability → M6 production/deployment.** M1–M5 are built;
+M6 is not started.
+
+### Learn M4 before running it
+
+M4 answers one precise engineering question: **when an agent is allowed to
+choose its next step, what stops that choice from becoming unbounded or
+unauthorized execution?** It does not make a model correct, and it does not
+make a tool safe by name alone. It gives a small loop explicit stopping and
+scope rules.
+
+Follow one request through the loop:
+
+1. **Observe:** the loop receives a goal and the accumulated result of any
+   earlier allowed tool call.
+2. **Reason:** the model returns structured JSON naming its next action.
+3. **Act only after validation:** the loop accepts only `read_kitty_hawk_manifest`,
+   `retrieve_context`, or `final_answer`. Any other proposed action terminates
+   the run before it executes.
+4. **Observe again or stop:** each completed step becomes part of the trajectory;
+   the loop stops on a final answer, a timeout, the iteration cap, or a
+   disallowed action.
+
+The three controls answer different questions:
+
+| Control | Question it answers | What the test demonstrates |
+| --- | --- | --- |
+| Iteration cap | Has the loop kept asking for another step without finishing? | A scripted agent is stopped after exactly three calls. |
+| Wall-clock timeout | Has the whole run taken longer than its permitted time, even if a call finally returns an answer? | A deliberately slow client terminates as `timeout`; its late answer is rejected. |
+| Tool allowlist | Is this particular action authorized at all? | An unknown action terminates as `disallowed_action` before execution. |
+
+#### Boundary with the 3.2M-token incident
+
+The earlier incident was not merely “a loop without brakes.” Its documented
+failure chain was: an authoritative syllabus path existed → a child lost that
+path → it launched `find /` → 594 seconds elapsed → no useful artifact.
+M4 would refuse `find /` **only if it were proposed as a non-allowlisted M4
+action**. M4 does not model a generic shell tool, authority-path inheritance,
+child-process containment, or a token/cost budget. Those omissions matter.
+
+M4 therefore teaches bounded autonomy at the tool-selection level. M5 is the
+milestone intended to make the authority-path failure legible through a trace;
+cost/token monitoring belongs to the later observability/production work. The
+tests establish the three M4 controls above, not a claim that M4 would have
+prevented the complete earlier incident.
 
 ```bash
 PYTHONUTF8=1 python -X utf8 tests/test_watsonx_ping.py
@@ -66,6 +109,10 @@ PYTHONUTF8=1 python -X utf8 tests/test_m3_rag.py
 PYTHONUTF8=1 python -X utf8 tests/test_m4_agent_loop.py
 # All 20 M4 agent-loop checks passed — bounded ReAct loop verified (success,
 # max_iterations, disallowed_action fail-closed, timeout, grounded retrieval).
+
+PYTHONUTF8=1 python -X utf8 tests/test_m5_api.py
+# All 20 M5 API checks passed — HTTP 200 on bounded non-success termination,
+# trace exposes internal state a status code cannot, genuine crash still 5xx.
 ```
 
 - **M1 (`scripts/watsonx_ping.py`):** a single structured Granite call behind
@@ -108,8 +155,30 @@ PYTHONUTF8=1 python -X utf8 tests/test_m4_agent_loop.py
   reasoning loop, not the 4-seat pipeline above). Not self-certified beyond
   what these offline checks actually exercise; no live watsonx.ai call was
   made to build or verify M4.
+- **M5 (`core/agent_api.py`, `core/trace.py`):** exposes the M4 loop over
+  HTTP (FastAPI) and answers the milestone's precise question — when a
+  request returns `200 OK`, does that mean the reasoning inside actually
+  succeeded? No. A `max_iterations` or `disallowed_action` termination
+  still returns `200` with an informative body; only a genuine crash (e.g.
+  an empty goal) produces a real `5xx`. `trace.py` is a small homegrown
+  span/tree tracer — built by hand before comparing to MLflow's own
+  `mlflow.trace`/autolog pattern, per this milestone's own instruction, not
+  a wrapper around the MLflow library. Every request returns its full
+  execution tree (`router → agent_iteration → model_call/validate_step/
+  tool:<name> → response`) alongside the result, so a disallowed action's
+  `validate_step` span shows `status: "error"` with the rejected action
+  named, even though the HTTP layer reports success throughout.
+  **Evidence and limits (Eden discipline, as above):** tested — HTTP 200
+  on all three bounded non-crash terminations (success, max_iterations,
+  disallowed_action), HTTP 500 on a genuine crash, full trace tree shape
+  verified per termination type, error status correctly recorded on a
+  rejected action's span. NOT_YET_MODELED — no real MLflow integration
+  (homegrown tracer only, by design at this stage), no auth/rate-limiting,
+  synchronous endpoint only (no async/concurrency tracing — M6 territory),
+  no trace persistence across requests. No live watsonx.ai call was made
+  to build or verify M5.
 
-No live watsonx.ai call anywhere in M1–M4's test paths.
+No live watsonx.ai call anywhere in M1–M5's test paths.
 
 ## Architecture
 
@@ -137,7 +206,9 @@ kitty-hawk/
 │   ├── syndicate_router.py
 │   ├── provider_protocol.py
 │   ├── watsonx_client.py
-│   └── agent_loop.py                  # M4 bounded Observe->Reason->Act->Observe loop
+│   ├── agent_loop.py                   # M4 bounded Observe->Reason->Act->Observe loop
+│   ├── trace.py                        # M5 homegrown span/trace tree (built before MLflow)
+│   └── agent_api.py                    # M5 FastAPI boundary over the M4 loop
 ├── scripts/
 │   ├── watsonx_ping.py                # M1 provider-boundary single-call script
 │   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
@@ -147,7 +218,7 @@ kitty-hawk/
 │   ├── corpus.py                      # M3 controlled corpus (no personal paths)
 │   ├── store.py                       # M3 required artifact: real local Chroma store
 │   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
-├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20 (M1-M4) offline checks
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20 (M1-M5) offline checks
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)
