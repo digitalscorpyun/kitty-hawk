@@ -40,6 +40,51 @@ PYTHONUTF8=1 python -X utf8 tests/test_watsonx_client.py
 
 No live watsonx.ai inference-service call (and therefore no Granite inference), no `.env`, no `verify=False`, no fallback.
 
+## Extending the Reliability Pattern — M1–M3 (Agentic Systems Trajectory)
+
+A second, newer track in this repository extends the same evidence-first
+discipline from the citation-reliability workflow above into a general
+agentic-systems build sequence: **M1 provider boundary → M2 evaluation
+baseline → M3 retrieval/context construction → M4 bounded agent/tool loop →
+M5 FastAPI+MLflow observability → M6 production/deployment.** M1–M3 are built;
+M4–M6 are not started.
+
+```bash
+PYTHONUTF8=1 python -X utf8 tests/test_watsonx_ping.py
+# All 17 watsonx_ping M1 checks passed — ONE PING ONLY (valid JSON, no
+# hallucination, exactly one ask() call). Offline: FakeClient, no credentials.
+
+PYTHONUTF8=1 python -X utf8 tests/test_m2_evaluation.py
+# All 34 M2 evaluation checks passed — baseline trace + HTTP-success-vs-
+# cognitive-success distinction + one-ping trace condition.
+
+PYTHONUTF8=1 python -X utf8 tests/test_m3_rag.py
+# All 28 M3 RAG checks passed — Document->Chunk->Embed->Index->Retrieve->
+# Context against a real local Chroma collection, citation-bearing results,
+# and an explicit retrieval-failure case. Requires chromadb (requirements.txt).
+```
+
+- **M1 (`scripts/watsonx_ping.py`):** a single structured Granite call behind
+  the same `set_agent`/`ask` seam as the citation workflow above, with one
+  bounded, allowlisted tool the model may or may not invoke. Offline test
+  proves valid-JSON, no-hallucination, and exactly-one-call behavior; no
+  network or credentials required to verify it.
+- **M2 (`evals/m1_evaluation.py`):** an evaluation baseline defined *before*
+  additional complexity was added — exact/schema checks, a latency threshold,
+  and an explicit rule that HTTP success does not imply cognitive success.
+- **M3 (`rag/`):** a real local Chroma-backed retrieval pipeline (`store.py`)
+  over a small controlled corpus, with citation-bearing context construction
+  and a demonstrated retrieval-failure case for an out-of-domain query. A
+  deterministic, dependency-free scaffold (`store_deterministic.py`) is
+  preserved for teaching reference but is not the M3 artifact. The corpus
+  loader ships with **no personal filesystem paths** — its two optional
+  private sources resolve only from `KITTY_HAWK_VAULT_SYLLABUS` /
+  `KITTY_HAWK_VAULT_GAMEPLAN` environment variables, unset on every clone but
+  the author's own, and fall back to synthetic stubs that preserve the exact
+  retrieval contract (this is the path CI and any other clone actually runs).
+
+No live watsonx.ai call anywhere in M1–M3's test paths.
+
 ## Architecture
 
 ```
@@ -66,7 +111,16 @@ kitty-hawk/
 │   ├── syndicate_router.py
 │   ├── provider_protocol.py
 │   └── watsonx_client.py
-├── tests/                            # 269 (+2 skips) + 17/18 offline checks
+├── scripts/
+│   ├── watsonx_ping.py                # M1 provider-boundary single-call script
+│   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
+├── evals/
+│   └── m1_evaluation.py               # M2 evaluation baseline
+├── rag/
+│   ├── corpus.py                      # M3 controlled corpus (no personal paths)
+│   ├── store.py                       # M3 required artifact: real local Chroma store
+│   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28 (M1-M3) offline checks
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)

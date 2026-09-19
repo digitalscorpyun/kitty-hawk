@@ -42,6 +42,9 @@ jobs:
         run: |
           python -X utf8 tests/test_mission_citation_fabrication.py
           python -X utf8 tests/test_watsonx_client.py
+          python -X utf8 tests/test_watsonx_ping.py
+          python -X utf8 tests/test_m2_evaluation.py
+          python -X utf8 tests/test_m3_rag.py
         shell: bash
 
       - name: Public-boundary scan (full tree, no path exemptions)

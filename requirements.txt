@@ -2,6 +2,8 @@
 # Offline demo needs stdlib + pytz (for now_iso) + PyYAML (syndicate_router seat config)
 pytz
 PyYAML>=6.0,<7
+# M3 local RAG (tests/test_m3_rag.py, rag/store.py) — real local Chroma collection, offline only
+chromadb>=0.5,<2
 # Live watsonx (optional) — uncomment to run live bounded validation
 # ibm-watsonx-ai>=1.6.0
 # httpx
