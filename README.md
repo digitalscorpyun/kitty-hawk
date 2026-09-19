@@ -40,14 +40,14 @@ PYTHONUTF8=1 python -X utf8 tests/test_watsonx_client.py
 
 No live watsonx.ai inference-service call (and therefore no Granite inference), no `.env`, no `verify=False`, no fallback.
 
-## Extending the Reliability Pattern — M1–M3 (Agentic Systems Trajectory)
+## Extending the Reliability Pattern — M1–M4 (Agentic Systems Trajectory)
 
 A second, newer track in this repository extends the same evidence-first
 discipline from the citation-reliability workflow above into a general
 agentic-systems build sequence: **M1 provider boundary → M2 evaluation
 baseline → M3 retrieval/context construction → M4 bounded agent/tool loop →
-M5 FastAPI+MLflow observability → M6 production/deployment.** M1–M3 are built;
-M4–M6 are not started.
+M5 FastAPI+MLflow observability → M6 production/deployment.** M1–M4 are built;
+M5–M6 are not started.
 
 ```bash
 PYTHONUTF8=1 python -X utf8 tests/test_watsonx_ping.py
@@ -62,6 +62,10 @@ PYTHONUTF8=1 python -X utf8 tests/test_m3_rag.py
 # All 28 M3 RAG checks passed — Document->Chunk->Embed->Index->Retrieve->
 # Context against a real local Chroma collection, citation-bearing results,
 # and an explicit retrieval-failure case. Requires chromadb (requirements.txt).
+
+PYTHONUTF8=1 python -X utf8 tests/test_m4_agent_loop.py
+# All 20 M4 agent-loop checks passed — bounded ReAct loop verified (success,
+# max_iterations, disallowed_action fail-closed, timeout, grounded retrieval).
 ```
 
 - **M1 (`scripts/watsonx_ping.py`):** a single structured Granite call behind
@@ -82,8 +86,30 @@ PYTHONUTF8=1 python -X utf8 tests/test_m3_rag.py
   `KITTY_HAWK_VAULT_GAMEPLAN` environment variables, unset on every clone but
   the author's own, and fall back to synthetic stubs that preserve the exact
   retrieval contract (this is the path CI and any other clone actually runs).
+- **M4 (`core/agent_loop.py`):** wraps M1's bounded manifest tool and M3's
+  retrieval pipeline into a single `Observe -> Reason -> Act -> Observe`
+  loop with three independent bounds — a 3-iteration cap, a wall-clock
+  timeout, and a fixed tool allowlist (`read_kitty_hawk_manifest`,
+  `retrieve_context`, `final_answer`) — so a reasoning loop cannot become an
+  uncontrolled execution loop. Every run reports one of four explicit
+  termination states (`success`, `max_iterations`, `timeout`,
+  `disallowed_action`); an unknown action fails closed on the same step it
+  was proposed, without executing anything. Offline tests exercise all four
+  termination paths directly, including a scripted slow client to prove the
+  timeout bound actually trips rather than only existing in theory.
+  **Evidence and limits, per this project's own evaluation discipline (Eden;
+  see `avm/dev_notes/project_eden_roadmap.md` in the Forge):** tested —
+  bounded termination in all four states, fail-closed on a disallowed
+  action, grounded (non-hallucinated) tool observations for both real
+  tools, offline-deterministic via `ScriptedFakeClient`. NOT_YET_MODELED —
+  no cost/token-budget termination condition (reserved for M5/M6
+  observability work), no mid-loop human-in-the-loop interrupt, no
+  cross-run trajectory persistence, no multi-agent handoff (this is one
+  reasoning loop, not the 4-seat pipeline above). Not self-certified beyond
+  what these offline checks actually exercise; no live watsonx.ai call was
+  made to build or verify M4.
 
-No live watsonx.ai call anywhere in M1–M3's test paths.
+No live watsonx.ai call anywhere in M1–M4's test paths.
 
 ## Architecture
 
@@ -110,7 +136,8 @@ kitty-hawk/
 │   ├── mission_citation_fabrication.py
 │   ├── syndicate_router.py
 │   ├── provider_protocol.py
-│   └── watsonx_client.py
+│   ├── watsonx_client.py
+│   └── agent_loop.py                  # M4 bounded Observe->Reason->Act->Observe loop
 ├── scripts/
 │   ├── watsonx_ping.py                # M1 provider-boundary single-call script
 │   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
@@ -120,7 +147,7 @@ kitty-hawk/
 │   ├── corpus.py                      # M3 controlled corpus (no personal paths)
 │   ├── store.py                       # M3 required artifact: real local Chroma store
 │   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
-├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28 (M1-M3) offline checks
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20 (M1-M4) offline checks
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)
