@@ -113,6 +113,12 @@ PYTHONUTF8=1 python -X utf8 tests/test_m4_agent_loop.py
 PYTHONUTF8=1 python -X utf8 tests/test_m5_api.py
 # All 20 M5 API checks passed — HTTP 200 on bounded non-success termination,
 # trace exposes internal state a status code cannot, genuine crash still 5xx.
+
+PYTHONUTF8=1 python -X utf8 tests/test_mlflow_comparison.py
+# All 16 MLflow-comparison checks passed — real MLflow write+read round trip,
+# structural equivalence with the homegrown tracer confirmed, bounded
+# terminations correctly persisted and queryable by trace_id. Requires
+# mlflow (requirements.txt); uses a local sqlite backend in a temp dir.
 ```
 
 - **M1 (`scripts/watsonx_ping.py`):** a single structured Granite call behind
@@ -172,11 +178,42 @@ PYTHONUTF8=1 python -X utf8 tests/test_m5_api.py
   on all three bounded non-crash terminations (success, max_iterations,
   disallowed_action), HTTP 500 on a genuine crash, full trace tree shape
   verified per termination type, error status correctly recorded on a
-  rejected action's span. NOT_YET_MODELED — no real MLflow integration
-  (homegrown tracer only, by design at this stage), no auth/rate-limiting,
+  rejected action's span. NOT_YET_MODELED — no auth/rate-limiting,
   synchronous endpoint only (no async/concurrency tracing — M6 territory),
-  no trace persistence across requests. No live watsonx.ai call was made
-  to build or verify M5.
+  no trace persistence across requests (the FastAPI layer's own trace, as
+  opposed to the real MLflow comparison below, is inline-only). No live
+  watsonx.ai call was made to build or verify M5.
+- **M5's second half — real MLflow comparison (`core/mlflow_comparison.py`,
+  `tests/test_mlflow_comparison.py`):** the gameplan's own instruction —
+  "use your own trace first, then compare to MLflow's `mlflow.trace` /
+  `autolog` pattern" — answered directly, not just discussed. The exact
+  same `agent_loop.py` instrumentation call-sites (`_maybe_span`) run
+  unchanged against a real MLflow trace instead of `trace.py`'s homegrown
+  one, via an adapter (`MlflowSpanTracer`) implementing the identical
+  `.span(name, **attrs)` interface. Proven, not asserted: a real MLflow
+  sqlite-backed write+read round trip; the persisted trace is structurally
+  identical (same span names, same nesting) to the homegrown tree for the
+  same scripted run; bounded terminations (`max_iterations`,
+  `disallowed_action`) are correctly queryable by `trace_id` after the
+  fact, the one thing the homegrown tracer's inline JSON can't do on its
+  own. **Two real findings surfaced by actually doing this, not predicted
+  in advance:** (1) MLflow's own bundled instrumentation guide explicitly
+  warns against recording a length instead of real content in a span —
+  exactly the pattern `trace.py`'s `model_call`/`tool:*` spans use
+  (`prompt_chars`, `observation_chars`); named here as a genuine
+  `trace.py` limitation, not silently patched. (2) both tracers require an
+  explicit outer span to unify multiple sequential top-level spans into
+  one coherent tree — `mlflow.start_span()` called with nothing already
+  active starts a disconnected new trace each time, exactly like
+  `trace.Tracer` raises if a second bare top-level span is opened after
+  the first already closed; `agent_api.py`'s `router` span (and this
+  module's `agent_run` span) exist for precisely this shared reason.
+  **NOT_YET_MODELED:** MLflow's autolog integrations (not applicable — no
+  supported framework underlies this hand-rolled loop), the MLflow trace
+  UI (`mlflow ui`) itself (this proves persistence and queryability via
+  the Python API only), the `prompt_chars`/`observation_chars` limitation
+  above (named, not fixed, to avoid re-touching already-committed M4/M5
+  instrumentation for this comparison pass).
 
 No live watsonx.ai call anywhere in M1–M5's test paths.
 
@@ -208,7 +245,8 @@ kitty-hawk/
 │   ├── watsonx_client.py
 │   ├── agent_loop.py                   # M4 bounded Observe->Reason->Act->Observe loop
 │   ├── trace.py                        # M5 homegrown span/trace tree (built before MLflow)
-│   └── agent_api.py                    # M5 FastAPI boundary over the M4 loop
+│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop
+│   └── mlflow_comparison.py            # M5 real MLflow comparison (same instrumentation, real backend)
 ├── scripts/
 │   ├── watsonx_ping.py                # M1 provider-boundary single-call script
 │   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
@@ -218,7 +256,7 @@ kitty-hawk/
 │   ├── corpus.py                      # M3 controlled corpus (no personal paths)
 │   ├── store.py                       # M3 required artifact: real local Chroma store
 │   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
-├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20 (M1-M5) offline checks
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16 (M1-M5) offline checks
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)

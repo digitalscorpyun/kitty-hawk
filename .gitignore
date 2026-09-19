@@ -27,3 +27,8 @@ _debug/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+
+# M5 MLflow comparison -- local trace stores, never committed
+mlruns/
+mlflow_kitty_hawk_comparison.db
+mlflow_test.db

@@ -7,6 +7,8 @@ chromadb>=0.5,<2
 # M5 FastAPI boundary + offline TestClient (tests/test_m5_api.py, core/agent_api.py)
 fastapi>=0.110,<1
 httpx>=0.27,<1
+# M5 real MLflow comparison against the homegrown tracer (tests/test_mlflow_comparison.py, core/mlflow_comparison.py)
+mlflow>=3.8,<4
 # Live watsonx (optional) — uncomment to run live bounded validation
 # ibm-watsonx-ai>=1.6.0
 # httpx

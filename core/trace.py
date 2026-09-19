@@ -53,7 +53,21 @@ class Span:
 
 class Tracer:
     """Builds one rooted tree of Spans per run. Not thread-safe by design --
-    one Tracer per request, matching one execution tree per request."""
+    one Tracer per request, matching one execution tree per request.
+
+    Callers that will open more than one top-level span in sequence (e.g.
+    agent_loop.py's per-iteration `agent_iteration` spans across several
+    loop turns) MUST wrap the whole sequence in one outer `with
+    tracer.span(...)` first -- without that wrapper, the *second* top-level
+    span raises RuntimeError, because the first already claimed the root
+    and popped back off the stack. agent_api.py's "router" span exists for
+    exactly this reason. This is not incidental: real MLflow's
+    `mlflow.start_span()` has the identical constraint -- called with
+    nothing already active, it starts a brand-new, disconnected trace each
+    time rather than nesting under a prior sibling call (confirmed directly
+    while building mlflow_comparison.py; see that module's own "agent_run"
+    wrapper). Both tracers require an explicit outer span for a multi-call
+    sequence to produce one coherent tree instead of several fragments."""
 
     def __init__(self) -> None:
         self.root: Span | None = None
