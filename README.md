@@ -48,9 +48,9 @@ agentic-systems build sequence: **M1 provider boundary → M2 evaluation
 baseline → M3 retrieval/context construction → M4 bounded agent/tool loop →
 M5 FastAPI+observability → M6 production/deployment.** M1–M5 are built.
 M6 decomposes into M6.0 (architecture decision, recorded) → M6a (async
-tracing + sampling, built) → M6b (durable backend) → M6c (auth) → M6d (AWS
-extension) → M6e (Orchestrate comparison); M6a is built, M6b–M6e are not
-started.
+tracing + sampling, built) → M6b (durable backend, built, local-only) →
+M6c (auth) → M6d (AWS extension) → M6e (Orchestrate comparison); M6a and
+M6b are built, M6c–M6e are not started.
 
 ### Learn M4 before running it
 
@@ -257,8 +257,45 @@ PYTHONUTF8=1 python -X utf8 tests/test_mlflow_comparison.py
   the HTTP handler itself remains synchronous (a distinct concern from
   trace-export async decoupling). No live watsonx.ai call was made to
   build or verify M6a.
+- **M6b — durable trace store, local-only (`core/trace_store.py`):**
+  answers the concrete question the M6a JSONL placeholder could not — once
+  a trace is written, does it survive and come back queryable by
+  `trace_id`? Built against the SQLAlchemy engine abstraction with
+  Postgres named as the intended production dialect; `make_sql_sink`
+  drops in for `make_local_jsonl_sink` with zero changes to
+  `AsyncTraceExporter` or `should_keep_full`. `agent_api.py`'s real
+  exporter now targets a local SQLite file by default, overridable via
+  `KITTY_HAWK_TRACE_DB_URL` to a Postgres URL with no code change — the
+  concrete proof the abstraction holds. The trace payload itself carries
+  no `trace_id` (`trace.py`'s `Tracer.to_dict()` is a bare span tree, and
+  unlike MLflow's library-assigned ID this homegrown tracer never
+  produced one); the store assigns that ID at write time, so "queryable
+  by trace_id" means the ID this store assigned, named explicitly rather
+  than implied. **M6.0's open question is deliberately not resolved
+  here:** no AWS resource (RDS or otherwise) is chosen, provisioned, or
+  billed by M6b — production hosting stays an explicitly open decision,
+  deferred to M6d.
+  **Evidence and limits (Eden discipline, as above):** tested — schema
+  creation (idempotent), a real sink write, round-trip persistence,
+  query-by-`trace_id` (including the not-found case), termination-filtered
+  `list_traces`, a trace with no termination-bearing span persisting with
+  `termination=None`, and end-to-end wiring through the live `/agent/run`
+  endpoint using agent_api's real (non-overridden) exporter (12/12 offline
+  checks against a real SQLAlchemy engine — SQLite, so this runs
+  identically on both CI runners with no service container;
+  `tests/test_m6b_trace_store.py`). A separate live-gated check
+  (`tests/test_m6b_trace_store_live_postgres.py`, opt-in via
+  `KITTY_HAWK_LIVE_POSTGRES_URL`, not part of default CI) runs the
+  identical schema/sink/query code against a real local Postgres server
+  for dialect-specific confidence beyond SQLite. NOT_YET_MODELED —
+  connection pooling/behavior under concurrent load, migrations tooling
+  (schema created via `metadata.create_all`, not a migration strategy),
+  retry/backoff or any stronger delivery guarantee (unchanged, accepted
+  risk from M6a), and production RDS/provider infrastructure (M6.0's open
+  item, deferred to M6d). No live watsonx.ai call was made to build or
+  verify M6b.
 
-No live watsonx.ai call anywhere in M1–M6a's test paths.
+No live watsonx.ai call anywhere in M1–M6b's test paths.
 
 ## Architecture
 
@@ -288,9 +325,10 @@ kitty-hawk/
 │   ├── watsonx_client.py
 │   ├── agent_loop.py                   # M4 bounded Observe->Reason->Act->Observe loop
 │   ├── trace.py                        # M5 homegrown span/trace tree (built before MLflow)
-│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop; M6a sampling/export wiring
+│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop; M6a/M6b sampling/export wiring
 │   ├── mlflow_comparison.py            # M5 real MLflow comparison (same instrumentation, real backend)
-│   └── trace_export.py                 # M6a sampling policy + async trace-export decoupling
+│   ├── trace_export.py                 # M6a sampling policy + async trace-export decoupling
+│   └── trace_store.py                  # M6b durable trace store (SQLAlchemy; SQLite dev/CI, Postgres-intended)
 ├── scripts/
 │   ├── watsonx_ping.py                # M1 provider-boundary single-call script
 │   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
@@ -300,7 +338,8 @@ kitty-hawk/
 │   ├── corpus.py                      # M3 controlled corpus (no personal paths)
 │   ├── store.py                       # M3 required artifact: real local Chroma store
 │   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
-├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16+23 (M1-M6a) offline checks
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16+23+12 (M1-M6b) offline checks
+│                                      # (+ test_m6b_trace_store_live_postgres.py: live-gated, not run in CI)
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)

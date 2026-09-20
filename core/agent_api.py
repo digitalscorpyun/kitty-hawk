@@ -26,17 +26,20 @@ NOT_YET_MODELED (explicit, per gameplan Section 6a; updated for M6a):
     - The endpoint itself is still synchronous (FastAPI's def, not async
       def) -- that is a distinct concern from M6a's async *trace export*,
       which this file now performs via trace_export.AsyncTraceExporter.
-    - M6a (see the exporter wiring below): sampled traces are persisted to
-      a local JSONL file, asynchronously, decoupled from the request/
-      response cycle. This is a placeholder sink, not the durable backend
-      -- M6b replaces it with Postgres without changing the sampling/async
-      logic. No delivery guarantee: a process crash or sink failure between
-      response and background write silently loses that trace (an accepted,
-      bounded risk per the M6.0 architecture decision record in the
-      gameplan, not solved by new infrastructure here).
+    - M6b (see the exporter wiring below): sampled traces are persisted via
+      trace_store.make_sql_sink -- a real SQLAlchemy-backed sink, default
+      local SQLite (KITTY_HAWK_TRACE_DB_URL unset), swappable to Postgres
+      by setting that env var to a Postgres URL with no code change here.
+      No AWS resource is chosen, provisioned, or billed by this wiring
+      (M6.0's RDS question stays open, deferred to M6d). No delivery
+      guarantee: a process crash or sink failure between response and
+      background write silently loses that trace (an accepted, bounded
+      risk per the M6.0 architecture decision record in the gameplan, not
+      solved by new infrastructure here -- unchanged since M6a).
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -49,6 +52,7 @@ for p in (str(THIS_DIR), str(REPO_ROOT)):
 
 from fastapi import Depends, FastAPI  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
 
 from agent_loop import run_agent_loop, MAX_ITERATIONS, DEFAULT_TIMEOUT_SECONDS  # noqa: E402
 from provider_protocol import SynapseProvider  # noqa: E402
@@ -57,13 +61,14 @@ from trace import Tracer  # noqa: E402
 from trace_export import (  # noqa: E402
     AsyncTraceExporter,
     DEFAULT_SUCCESS_SAMPLE_RATE,
-    make_local_jsonl_sink,
     make_rate_sampler,
     should_keep_full,
 )
+from trace_store import make_sql_sink  # noqa: E402
 
-_DEFAULT_TRACE_PATH = REPO_ROOT / "kitty_hawk_traces.jsonl"
+_DEFAULT_TRACE_DB_URL = f"sqlite:///{REPO_ROOT / 'kitty_hawk_traces.db'}"
 _success_sampler = make_rate_sampler(DEFAULT_SUCCESS_SAMPLE_RATE)
+_trace_engine = None  # lazily created once per process, see _get_trace_engine below
 
 app = FastAPI(
     title="Kitty Hawk M5 — Bounded Agent Loop with Trace",
@@ -87,13 +92,29 @@ def get_rag_store() -> "RagStore | None":
     return None
 
 
+def _get_trace_engine():
+    """One SQLAlchemy engine (and its connection pool) per process, created
+    lazily on first use and reused across requests -- not recreated per
+    request, which would otherwise open a fresh pool (and, on SQLite, a
+    fresh file handle) on every call. Pool sizing/behavior under concurrent
+    load is otherwise untouched (NOT_YET_MODELED, M6b scope)."""
+    global _trace_engine
+    if _trace_engine is None:
+        _trace_engine = create_engine(os.environ.get("KITTY_HAWK_TRACE_DB_URL", _DEFAULT_TRACE_DB_URL))
+    return _trace_engine
+
+
 def get_trace_exporter() -> AsyncTraceExporter:
-    """Real default: appends sampled/kept traces to a local JSONL file (see
-    trace_export.make_local_jsonl_sink) -- a placeholder sink, not the
-    durable backend M6b calls for. Offline tests override this dependency
-    with an in-memory sink so they can assert on export calls directly,
-    without touching disk."""
-    return AsyncTraceExporter(sink=make_local_jsonl_sink(_DEFAULT_TRACE_PATH))
+    """Real default: persists sampled/kept traces via trace_store's
+    SQLAlchemy sink to a local SQLite file. KITTY_HAWK_TRACE_DB_URL
+    overrides the target -- pointing it at a Postgres URL swaps the durable
+    backend with no code change here, proving the sink is built against the
+    SQLAlchemy abstraction with Postgres as the intended database class.
+    This wiring does not choose, provision, or bill any hosted production
+    service (M6.0's RDS question stays open). Offline tests override this
+    dependency with an in-memory sink so they can assert on export calls
+    directly, without touching disk."""
+    return AsyncTraceExporter(sink=make_sql_sink(_get_trace_engine()))
 
 
 class RunRequest(BaseModel):

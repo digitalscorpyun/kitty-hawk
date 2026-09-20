@@ -9,6 +9,12 @@ fastapi>=0.110,<1
 httpx>=0.27,<1
 # M5 real MLflow comparison against the homegrown tracer (tests/test_mlflow_comparison.py, core/mlflow_comparison.py)
 mlflow>=3.8,<4
+# M6b durable trace store (core/trace_store.py) — built against the SQLAlchemy
+# engine abstraction; SQLite (offline CI, both OSes) and Postgres (intended
+# production dialect, live-gated only — tests/test_m6b_trace_store_live_postgres.py)
+# run the identical schema/sink/query code through the same engine interface.
+sqlalchemy>=2.0,<3
+psycopg2-binary>=2.9,<3
 # Live watsonx (optional) — uncomment to run live bounded validation
 # ibm-watsonx-ai>=1.6.0
 # httpx
