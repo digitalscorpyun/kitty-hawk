@@ -18,16 +18,22 @@ Execution tree this endpoint produces (per the gameplan's own spec):
 turn; "model_call" and "validate_step" are always present per iteration;
 "tool:<name>" only appears when a real tool (not final_answer) was chosen.
 
-NOT_YET_MODELED (explicit, per gameplan Section 6a):
+NOT_YET_MODELED (explicit, per gameplan Section 6a; updated for M6a):
     - No auth/rate-limiting on this endpoint -- it is a reliability/
-      observability demonstration, not a hardened public API.
-    - No MLflow library integration yet -- this is the homegrown trace the
-      gameplan explicitly asks to build first; comparing it to MLflow's
-      autolog pattern is a distinct, later step.
-    - The endpoint is synchronous (FastAPI's def, not async def) --
-      concurrency/async tracing is M6 (production/deployment) territory.
-    - No persistence of traces across requests -- each response carries its
-      own trace; nothing is written to disk or a trace store by this file.
+      observability demonstration, not a hardened public API (M6c).
+    - MLflow library integration is a separate comparison path
+      (core/mlflow_comparison.py), not wired into this endpoint.
+    - The endpoint itself is still synchronous (FastAPI's def, not async
+      def) -- that is a distinct concern from M6a's async *trace export*,
+      which this file now performs via trace_export.AsyncTraceExporter.
+    - M6a (see the exporter wiring below): sampled traces are persisted to
+      a local JSONL file, asynchronously, decoupled from the request/
+      response cycle. This is a placeholder sink, not the durable backend
+      -- M6b replaces it with Postgres without changing the sampling/async
+      logic. No delivery guarantee: a process crash or sink failure between
+      response and background write silently loses that trace (an accepted,
+      bounded risk per the M6.0 architecture decision record in the
+      gameplan, not solved by new infrastructure here).
 """
 from __future__ import annotations
 
@@ -48,6 +54,16 @@ from agent_loop import run_agent_loop, MAX_ITERATIONS, DEFAULT_TIMEOUT_SECONDS  
 from provider_protocol import SynapseProvider  # noqa: E402
 from rag.store import RagStore  # noqa: E402
 from trace import Tracer  # noqa: E402
+from trace_export import (  # noqa: E402
+    AsyncTraceExporter,
+    DEFAULT_SUCCESS_SAMPLE_RATE,
+    make_local_jsonl_sink,
+    make_rate_sampler,
+    should_keep_full,
+)
+
+_DEFAULT_TRACE_PATH = REPO_ROOT / "kitty_hawk_traces.jsonl"
+_success_sampler = make_rate_sampler(DEFAULT_SUCCESS_SAMPLE_RATE)
 
 app = FastAPI(
     title="Kitty Hawk M5 — Bounded Agent Loop with Trace",
@@ -71,6 +87,15 @@ def get_rag_store() -> "RagStore | None":
     return None
 
 
+def get_trace_exporter() -> AsyncTraceExporter:
+    """Real default: appends sampled/kept traces to a local JSONL file (see
+    trace_export.make_local_jsonl_sink) -- a placeholder sink, not the
+    durable backend M6b calls for. Offline tests override this dependency
+    with an in-memory sink so they can assert on export calls directly,
+    without touching disk."""
+    return AsyncTraceExporter(sink=make_local_jsonl_sink(_DEFAULT_TRACE_PATH))
+
+
 class RunRequest(BaseModel):
     goal: str
     max_iterations: int = MAX_ITERATIONS
@@ -91,6 +116,7 @@ def run(
     req: RunRequest,
     client: "SynapseProvider | None" = Depends(get_client),
     rag_store: "RagStore | None" = Depends(get_rag_store),
+    exporter: AsyncTraceExporter = Depends(get_trace_exporter),
 ) -> RunResponse:
     """Always returns HTTP 200 on a bounded termination (success,
     max_iterations, timeout, disallowed_action) -- these are valid outcomes
@@ -110,11 +136,23 @@ def run(
         with tracer.span("response", termination=result["termination"]):
             pass  # the response span marks hand-off back to the HTTP layer itself
 
+    trace_dict = tracer.to_dict()
+
+    # M6a: sampling keyed on Kitty Hawk's own termination state (and any
+    # real exception anywhere in the span tree), never on HTTP status -- a
+    # bounded non-success termination is HTTP 200 above and must still be
+    # kept at 100%. Export is fire-and-forget: the response returned below
+    # never waits on it (see trace_export.AsyncTraceExporter). The caller
+    # always receives the full trace inline regardless of this decision --
+    # sampling controls what gets persisted, not what the caller sees.
+    if should_keep_full(result["termination"], trace_dict) or _success_sampler():
+        exporter.export(trace_dict)
+
     return RunResponse(
         goal=result["goal"],
         termination=result["termination"],
         answer=result["answer"],
         iterations_used=result["iterations_used"],
         elapsed_seconds=result["elapsed_seconds"],
-        trace=tracer.to_dict(),
+        trace=trace_dict,
     )

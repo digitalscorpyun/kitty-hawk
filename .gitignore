@@ -32,3 +32,6 @@ _debug/
 mlruns/
 mlflow_kitty_hawk_comparison.db
 mlflow_test.db
+
+# M6a async trace export -- local JSONL placeholder sink, never committed
+kitty_hawk_traces.jsonl

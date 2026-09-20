@@ -46,8 +46,11 @@ A second, newer track in this repository extends the same evidence-first
 discipline from the citation-reliability workflow above into a general
 agentic-systems build sequence: **M1 provider boundary → M2 evaluation
 baseline → M3 retrieval/context construction → M4 bounded agent/tool loop →
-M5 FastAPI+observability → M6 production/deployment.** M1–M5 are built;
-M6 is not started.
+M5 FastAPI+observability → M6 production/deployment.** M1–M5 are built.
+M6 decomposes into M6.0 (architecture decision, recorded) → M6a (async
+tracing + sampling, built) → M6b (durable backend) → M6c (auth) → M6d (AWS
+extension) → M6e (Orchestrate comparison); M6a is built, M6b–M6e are not
+started.
 
 ### Learn M4 before running it
 
@@ -214,8 +217,48 @@ PYTHONUTF8=1 python -X utf8 tests/test_mlflow_comparison.py
   the Python API only), the `prompt_chars`/`observation_chars` limitation
   above (named, not fixed, to avoid re-touching already-committed M4/M5
   instrumentation for this comparison pass).
+- **M6.0 — architecture decision (recorded, no code):** before any M6 build,
+  an explicit decision record was made and captured in the governing
+  gameplan (Vault): AWS account/region, preserving the FastAPI boundary
+  behind API Gateway (not a bare-loop deployment), deferring any live
+  watsonx.ai/Granite call past the initial infrastructure smoke test, a
+  hard $0-actual-spend constraint with a present-before-create rule for
+  any recurring-cost resource (NAT Gateway, EFS, always-on RDS), and a
+  provisional rebuild-on-cold-start RAG persistence choice pending a
+  measured latency check. Four items remain explicitly open (cold-start
+  latency, Granite credential/secrets design, API Gateway auth mechanism,
+  whether M6b's durable backend needs RDS) — named, not silently assumed.
+- **M6a — sampling + async trace export (`core/trace_export.py`):**
+  answers the milestone's precise question — once traces need to survive
+  past a single request/response, what gets kept, and does persisting them
+  cost the caller anything? The sampling gate (`should_keep_full`) keys on
+  Kitty Hawk's own termination state (`max_iterations`/`timeout`/
+  `disallowed_action`) and on any real exception anywhere in the span
+  tree — never on HTTP status, since M5 already proved a bounded
+  non-success termination returns `200`. Only a clean `success` trace with
+  no error spans is eligible for a configurable-rate sampler (default 10%).
+  `AsyncTraceExporter` hands a kept trace to a background thread and
+  returns immediately; the caller's response never waits on the write, and
+  a sink failure is isolated to the background thread and never propagates
+  to the request path. The default sink (`make_local_jsonl_sink`) appends
+  to a local, gitignored JSONL file — an explicit placeholder, not the
+  durable backend M6b calls for.
+  **Evidence and limits (Eden discipline, as above):** tested — sampling
+  gate correctness for all three non-success terminations and both
+  success/error-span cases, deterministic sampler behavior under an
+  injected RNG, export non-blocking under a deliberately slow sink,
+  sink-failure isolation, JSONL sink round-trip, and end-to-end wiring
+  through the live `/agent/run` endpoint (23/23 offline checks,
+  `tests/test_m6a_sampling_export.py`). NOT_YET_MODELED — no delivery
+  guarantee (a process crash or sink failure between response and
+  background write silently loses that trace; named as an accepted,
+  bounded risk per the M6.0 decision record, not solved by new
+  infrastructure here), no durable backend (still a local file; M6b),
+  the HTTP handler itself remains synchronous (a distinct concern from
+  trace-export async decoupling). No live watsonx.ai call was made to
+  build or verify M6a.
 
-No live watsonx.ai call anywhere in M1–M5's test paths.
+No live watsonx.ai call anywhere in M1–M6a's test paths.
 
 ## Architecture
 
@@ -245,8 +288,9 @@ kitty-hawk/
 │   ├── watsonx_client.py
 │   ├── agent_loop.py                   # M4 bounded Observe->Reason->Act->Observe loop
 │   ├── trace.py                        # M5 homegrown span/trace tree (built before MLflow)
-│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop
-│   └── mlflow_comparison.py            # M5 real MLflow comparison (same instrumentation, real backend)
+│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop; M6a sampling/export wiring
+│   ├── mlflow_comparison.py            # M5 real MLflow comparison (same instrumentation, real backend)
+│   └── trace_export.py                 # M6a sampling policy + async trace-export decoupling
 ├── scripts/
 │   ├── watsonx_ping.py                # M1 provider-boundary single-call script
 │   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
@@ -256,7 +300,7 @@ kitty-hawk/
 │   ├── corpus.py                      # M3 controlled corpus (no personal paths)
 │   ├── store.py                       # M3 required artifact: real local Chroma store
 │   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
-├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16 (M1-M5) offline checks
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16+23 (M1-M6a) offline checks
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public
 ├── examples/                         # pre-generated reports (JSON + MD)
