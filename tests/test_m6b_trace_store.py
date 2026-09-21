@@ -97,8 +97,14 @@ def main() -> None:
         # --- schema creation is idempotent ---
         init_schema(engine)
         init_schema(engine)  # second call must not raise or duplicate the table
-        check(engine.dialect.has_table(engine.connect(), traces_table.name),
-              "traces table must exist after init_schema")
+        # engine.connect() checks out a pooled connection; it must be closed
+        # explicitly (not left to GC) or it can still be open when this
+        # block's engine.dispose() runs below -- exactly the leak that made
+        # this test flaky on Windows (passed under Python 3.10 by GC timing
+        # luck, failed under 3.11: PermissionError deleting the temp dir).
+        with engine.connect() as conn:
+            check(engine.dialect.has_table(conn, traces_table.name),
+                  "traces table must exist after init_schema")
 
         # --- sink write + round-trip persistence + query by trace_id ---
         sink = make_sql_sink(engine)
