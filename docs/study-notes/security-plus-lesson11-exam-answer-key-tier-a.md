@@ -4,6 +4,12 @@ Source: ed2go/Cengage "Lesson 11: Networking Threats, Assessments, and
 Defenses" practice exam (30 questions). Tier A = the instructor-grade key
 (correct letter + one-line rationale), for checking a self-attempt against.
 
+> **Corrected 2026-09-21** against the official LMS grading from attempt #1
+> (86.7%, 26/30 — see `security-plus-lesson11-exam-attempt1-results.md`).
+> Three answers below (11, 17, 22) were wrong in the original version of
+> this key and have been fixed to match the LMS's own answer key, with the
+> reasoning that reconciles them.
+
 | # | Question (short) | Answer | Why |
 | - | --- | :-: | --- |
 | 1 | Attack copying personal info via unauthorized RF connection | **A** Bluesnarfing | Bluesnarfing = accessing unauthorized info from a device over Bluetooth; Bluejacking (D) only sends unsolicited messages, it doesn't extract data. |
@@ -16,18 +22,18 @@ Defenses" practice exam (30 questions). Tier A = the instructor-grade key
 | 8 | RFID attack: listening to tag↔reader communications | **C** Eavesdropping | Passive interception of the RF exchange between tag and reader. |
 | 9 | AP type managed by a WLC | **D** Controller AP | By definition, a controller AP is managed through a dedicated WLC. |
 | 10 | Why jamming attacks are rare | **D** Require expensive, sophisticated equipment | Effective RF jamming needs specialized transmit hardware, raising the barrier to entry. |
-| 11 | Site survey tool visualizing coverage/bandwidth/rate/interference | **A** Heat maps | Heat maps are the standard visual site-survey output. |
+| 11 | Site survey tool visualizing coverage/bandwidth/rate/interference | **D** Wi-Fi analyzers | *(corrected)* Heat maps only visualize signal coverage/strength; the LMS reserves this broader metric set (bandwidth, data rate, interference) for Wi-Fi analyzers. |
 | 12 | Probe: a configured laptop scanning/reporting to a central DB | **D** Wireless device probe | A "wireless device probe" is an ordinary wireless client (e.g., a laptop) repurposed to scan and report — vs. a purpose-built dedicated probe. |
 | 13 | Shared secret key + IV that changes per packet | **C** WEP | WEP's defining (weak) mechanism is a static key combined with a per-packet IV. |
 | 14 | IC that stores IoT device identity/auth info | **D** Subscriber identity module | This is the textbook definition of a SIM card. |
 | 15 | Probe that *only* monitors RF/airwaves | **D** Dedicated probe | Dedicated probes have no other function — they can't also serve as an AP or client. |
 | 16 | Employee secretly attaches a cheap router to the wired network | **D** Rogue access point | An unauthorized AP plugged into the trusted network, bypassing security controls — textbook rogue AP. |
-| 17 | Mitigation for a "bump the reader against the phone" NFC data-theft attack | **A** Protect the phone with a unique password/PIN | This attack needs no active pairing, so pairing/proximity-awareness advice (B, C, D) doesn't stop it — a locked device does. |
+| 17 | Mitigation for a "bump the reader against the phone" NFC data-theft attack | **B** Turn NFC off while in a crowded area | *(corrected)* The LMS treats a password/PIN as a device-theft mitigation, not a data-theft one; since the attack needs NFC live and the victim nearby, disabling NFC in crowds removes the attack surface. |
 | 18 | Prevent all devices at an event from communicating/calling | **A** Jamming | Deliberately flooding RF to block all wireless communication in range. |
 | 19 | Attendance system replacing sign-in sheets, personal devices banned | **A** RFID | Badge-based RFID needs no personal electronic device, unlike Bluetooth/NFC/Wi-Fi options. |
 | 20 | Adjust frequency bands, optimum channels, available spectrum when relocating an AP | **C** Spectrum selection | Spectrum selection is the configuration step that governs which bands/channels the AP uses. |
 | 21 | Wide-range, indoor-focused, low-cost, long-battery, high-density LPWAN cellular tech | **A** Narrowband IoT | NB-IoT is the LPWAN standard defined by exactly these characteristics. |
-| 22 | Small business (5 employees) moving into an office — enterprise AP choice | **B** Controller AP | Once you're past a single AP, controller-managed APs are the standard enterprise-grade choice for centralized management. |
+| 22 | Small business (5 employees) moving into an office — enterprise AP choice | **D** Fat AP | *(corrected)* At this small a scale, a self-contained Fat AP (no separate WLC needed) is the expected answer; Controller APs are for deployments large enough to justify centralized WLC management. |
 | 23 | Car hands-free system: voice control, contacts, calls, screen mirroring | **C** Bluetooth | Bluetooth is the standard for hands-free pairing and screen-mirroring in vehicle infotainment. |
 | 24 | Steal phone data via a device connected without physical touch | **A** Data theft | This defines the NFC "data theft" vulnerability category (proximity read, no contact needed). |
 | 25 | Control multiple devices (speakers, mice) wirelessly within ~100m | **C** Bluetooth | Bluetooth Class 1 range is ~100m and is the standard for peripheral pairing. |
@@ -41,6 +47,6 @@ Defenses" practice exam (30 questions). Tier A = the instructor-grade key
 
 ```
 1-A  2-C  3-C  4-D  5-B  6-C  7-A  8-C  9-D  10-D
-11-A 12-D 13-C 14-D 15-D 16-D 17-A 18-A 19-A 20-C
-21-A 22-B 23-C 24-A 25-C 26-C 27-B 28-D 29-B 30-C
+11-D 12-D 13-C 14-D 15-D 16-D 17-B 18-A 19-A 20-C
+21-A 22-D 23-C 24-A 25-C 26-C 27-B 28-D 29-B 30-C
 ```
