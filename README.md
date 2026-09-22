@@ -49,8 +49,8 @@ baseline → M3 retrieval/context construction → M4 bounded agent/tool loop �
 M5 FastAPI+observability → M6 production/deployment.** M1–M5 are built.
 M6 decomposes into M6.0 (architecture decision, recorded) → M6a (async
 tracing + sampling, built) → M6b (durable backend, built, local-only) →
-M6c (auth) → M6d (AWS extension) → M6e (Orchestrate comparison); M6a and
-M6b are built, M6c–M6e are not started.
+M6c (auth, built, local-only) → M6d (AWS extension) → M6e (Orchestrate
+comparison); M6a, M6b, and M6c are built, M6d–M6e are not started.
 
 ### Learn M4 before running it
 
@@ -294,8 +294,42 @@ PYTHONUTF8=1 python -X utf8 tests/test_mlflow_comparison.py
   risk from M6a), and production RDS/provider infrastructure (M6.0's open
   item, deferred to M6d). No live watsonx.ai call was made to build or
   verify M6b.
+- **M6c — application-level authentication, local-only (`core/auth.py`):**
+  answers who is allowed to call `/agent/run` and what happens to a
+  request that isn't — the auth half of the gap `agent_api.py`'s own
+  docstring named since M5. A single shared bearer token
+  (`KITTY_HAWK_API_KEY`, checked via `auth.verify_api_key`) gates the
+  route through FastAPI's `dependencies=[Depends(...)]`, which resolves
+  before the route body runs — a rejected request never constructs a
+  `Tracer`, never calls `run_agent_loop`, and never reaches the exporter.
+  Fail-closed by construction: an unset or empty-string
+  `KITTY_HAWK_API_KEY` is not "auth disabled" — no presented token can
+  ever satisfy the comparison in that state, so every request is
+  rejected. Comparison uses `hmac.compare_digest`, invoked unconditionally
+  (even when unconfigured) so the unconfigured case doesn't take a
+  different timing shape than a configured-but-wrong-token case. M6.0's
+  own open item — the AWS API Gateway auth mechanism — is deliberately
+  not resolved here, same deferral pattern as M6b's RDS question.
+  **Evidence and limits (Eden discipline, as above):** tested — the real
+  `verify_api_key` dependency exercised directly (never overridden, unlike
+  every other suite that hits `/agent/run`): fail-closed on unset
+  configuration, fail-closed on an explicit empty string, wrong-token
+  rejection, missing-header rejection, correct-token acceptance with
+  normal M4/M5/M6a/M6b behavior otherwise unchanged, and — the core claim
+  — zero `ask()` calls and zero export calls on every rejected request
+  (18/18 offline checks, `tests/test_m6c_auth.py`). Every pre-existing
+  suite that calls `/agent/run` (`test_m5_api.py`, `test_m6a_sampling_export.py`,
+  `test_m6b_trace_store.py`) now explicitly overrides `verify_api_key` to
+  bypass auth, confined to those files with a one-line comment naming why
+  — confirmed unchanged at 20/23/12 checks respectively, no regression.
+  NOT_YET_MODELED — rate-limiting (named since M5, not scheduled to a
+  milestone), authorization/roles (one endpoint, binary allowed/not-allowed
+  only), the AWS API Gateway auth mechanism (M6.0's open item, deferred to
+  M6d), key rotation/secrets-manager integration (a plain environment
+  variable), multiple/per-caller credentials (one shared token only). No
+  live watsonx.ai call was made to build or verify M6c.
 
-No live watsonx.ai call anywhere in M1–M6b's test paths.
+No live watsonx.ai call anywhere in M1–M6c's test paths.
 
 ## Architecture
 
@@ -325,10 +359,11 @@ kitty-hawk/
 │   ├── watsonx_client.py
 │   ├── agent_loop.py                   # M4 bounded Observe->Reason->Act->Observe loop
 │   ├── trace.py                        # M5 homegrown span/trace tree (built before MLflow)
-│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop; M6a/M6b sampling/export wiring
+│   ├── agent_api.py                    # M5 FastAPI boundary over the M4 loop; M6a/M6b/M6c wiring
 │   ├── mlflow_comparison.py            # M5 real MLflow comparison (same instrumentation, real backend)
 │   ├── trace_export.py                 # M6a sampling policy + async trace-export decoupling
-│   └── trace_store.py                  # M6b durable trace store (SQLAlchemy; SQLite dev/CI, Postgres-intended)
+│   ├── trace_store.py                  # M6b durable trace store (SQLAlchemy; SQLite dev/CI, Postgres-intended)
+│   └── auth.py                         # M6c bearer-token auth (fail-closed, constant-time compare)
 ├── scripts/
 │   ├── watsonx_ping.py                # M1 provider-boundary single-call script
 │   └── public_boundary_scan.py        # CI check: no personal paths anywhere in-tree
@@ -338,7 +373,7 @@ kitty-hawk/
 │   ├── corpus.py                      # M3 controlled corpus (no personal paths)
 │   ├── store.py                       # M3 required artifact: real local Chroma store
 │   └── store_deterministic.py         # teaching-reference scaffold, not the M3 artifact
-├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16+23+12 (M1-M6b) offline checks
+├── tests/                            # 269+17/18 (citation/watsonx) + 17+34+28+20+20+16+23+12+18 (M1-M6c) offline checks
 │                                      # (+ test_m6b_trace_store_live_postgres.py: live-gated, not run in CI)
 ├── docs/
 │   └── EVIDENCE.md                   # observed vs not-yet-observed, historical vs public

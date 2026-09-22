@@ -18,9 +18,16 @@ Execution tree this endpoint produces (per the gameplan's own spec):
 turn; "model_call" and "validate_step" are always present per iteration;
 "tool:<name>" only appears when a real tool (not final_answer) was chosen.
 
-NOT_YET_MODELED (explicit, per gameplan Section 6a; updated for M6a):
-    - No auth/rate-limiting on this endpoint -- it is a reliability/
-      observability demonstration, not a hardened public API (M6c).
+NOT_YET_MODELED (explicit, per gameplan Section 6a; updated for M6c):
+    - M6c (see the route decorator below): this endpoint now requires a
+      valid bearer token (auth.verify_api_key, KITTY_HAWK_API_KEY) --
+      fail-closed if unset/empty, constant-time comparison, rejection
+      happens before Tracer construction or run_agent_loop is ever
+      called. Still not modeled: rate-limiting (unchanged since M5),
+      authorization/roles (one endpoint, binary allowed/not-allowed
+      only), the AWS API Gateway auth mechanism (M6.0's open item,
+      deferred to M6d), key rotation/secrets-manager integration, and
+      multiple/per-caller credentials (one shared token only).
     - MLflow library integration is a separate comparison path
       (core/mlflow_comparison.py), not wired into this endpoint.
     - The endpoint itself is still synchronous (FastAPI's def, not async
@@ -55,6 +62,7 @@ from pydantic import BaseModel  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 
 from agent_loop import run_agent_loop, MAX_ITERATIONS, DEFAULT_TIMEOUT_SECONDS  # noqa: E402
+from auth import verify_api_key  # noqa: E402
 from provider_protocol import SynapseProvider  # noqa: E402
 from rag.store import RagStore  # noqa: E402
 from trace import Tracer  # noqa: E402
@@ -132,7 +140,7 @@ class RunResponse(BaseModel):
     trace: dict[str, Any] | None
 
 
-@app.post("/agent/run", response_model=RunResponse)
+@app.post("/agent/run", response_model=RunResponse, dependencies=[Depends(verify_api_key)])
 def run(
     req: RunRequest,
     client: "SynapseProvider | None" = Depends(get_client),

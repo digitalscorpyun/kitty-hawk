@@ -155,6 +155,10 @@ def main() -> None:
     recorder = RecordingExporter()
     api.app.dependency_overrides[api.get_trace_exporter] = lambda: recorder
     api.app.dependency_overrides[api.get_rag_store] = _fresh_test_store
+    # M6c added a real auth dependency to /agent/run; this suite predates
+    # M6c and tests sampling/export, not auth, so bypass it here. The real
+    # dependency is exercised for real in tests/test_m6c_auth.py.
+    api.app.dependency_overrides[api.verify_api_key] = lambda: None
 
     # Non-success termination: must always export, regardless of the success sampler.
     original_sampler = api._success_sampler

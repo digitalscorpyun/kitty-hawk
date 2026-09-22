@@ -71,6 +71,12 @@ def main() -> None:
     # suite proves (a genuine crash vs. a bounded non-success termination).
     client_app = TestClient(api.app, raise_server_exceptions=False)
 
+    # M6c added a real auth dependency to /agent/run. This suite predates
+    # M6c and tests M5/M4 behavior, not auth -- bypass it here so every
+    # existing request in this file keeps working unauthenticated. The
+    # real dependency is exercised for real in tests/test_m6c_auth.py.
+    api.app.dependency_overrides[api.verify_api_key] = lambda: None
+
     # --- Success case: HTTP 200, trace shows the full tree ---
     fake_success = ScriptedFakeClient([
         json.dumps({"thought": "check manifest", "action": al.ACTION_MANIFEST, "action_input": ""}),
