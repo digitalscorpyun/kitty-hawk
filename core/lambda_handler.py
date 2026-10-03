@@ -14,7 +14,9 @@ Design, deliberately narrow:
       fall through to the real WatsonXClient default.
     - The bearer check (auth.verify_api_key) is NOT overridden. A deployed
       function still rejects every request unless KITTY_HAWK_API_KEY is set
-      and presented (plan decision 4).
+      and presented (plan decision 4). Because IAM (SigV4) and the bearer token
+      cannot both use the Authorization header, the bearer token is sent in
+      X-Kitty-Hawk-Token and mapped to Authorization by handler() below.
     - Placeholder WATSONX_* values (see below the mode check) exist only to
       satisfy watsonx_client's import-time check; they are not credentials.
     - Trace store: Lambda's package directory is read-only, so the default
@@ -93,4 +95,23 @@ def _fresh_store() -> RagStore:
 api.app.dependency_overrides[api.get_client] = lambda: _ScriptedFakeClient()
 api.app.dependency_overrides[api.get_rag_store] = _fresh_store
 
-handler = Mangum(api.app, lifespan="off")
+_mangum = Mangum(api.app, lifespan="off")
+
+# Carrying both IAM and bearer credentials: a Lambda Function URL with AWS_IAM auth
+# requires the SigV4 signature in the Authorization header, which is the header
+# auth.verify_api_key reads. Lambda verifies the signature BEFORE this code runs, so
+# the original Authorization value is no longer needed here. The bearer token travels
+# in X-Kitty-Hawk-Token instead and is mapped into Authorization: Bearer <token>.
+# Fail-closed: whatever Authorization value arrived is always discarded; if the custom
+# header is absent there is no Authorization at all, so the bearer check rejects (401).
+BEARER_HEADER = "x-kitty-hawk-token"
+
+
+def handler(event, context):
+    headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
+    headers.pop("authorization", None)
+    token = headers.pop(BEARER_HEADER, None)
+    if token:
+        headers["authorization"] = f"Bearer {token}"
+    event = {**event, "headers": headers}
+    return _mangum(event, context)

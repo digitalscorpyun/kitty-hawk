@@ -34,7 +34,11 @@ except ImportError:
 def _event(body: dict, token: str | None) -> dict:
     headers = {"content-type": "application/json"}
     if token is not None:
-        headers["authorization"] = f"Bearer {token}"
+        headers["x-kitty-hawk-token"] = token
+    return _event_with_headers(body, headers)
+
+
+def _event_with_headers(body: dict, headers: dict) -> dict:
     return {
         "version": "2.0",
         "routeKey": "POST /agent/run",
@@ -107,6 +111,22 @@ def main() -> None:
     r_ok2 = lh.handler(_event(body, TOKEN), None)
     check(r_ok2["statusCode"] == 200 and json.loads(r_ok2["body"])["termination"] == "success",
           "second request should also succeed")
+
+    # Function URL (AWS_IAM) shape: Authorization carries a SigV4 signature, the bearer
+    # token travels in X-Kitty-Hawk-Token.
+    sigv4 = "AWS4-HMAC-SHA256 Credential=AKIAEXAMPLE/20260101/us-east-1/lambda/aws4_request, Signature=00"
+    ok_hdr = {"content-type": "application/json", "authorization": sigv4, "x-kitty-hawk-token": TOKEN}
+    r_url_ok = lh.handler(_event_with_headers(body, ok_hdr), None)
+    check(r_url_ok["statusCode"] == 200, f"SigV4 Authorization + token header should be 200, got {r_url_ok['statusCode']}")
+    no_tok = {"content-type": "application/json", "authorization": sigv4}
+    r_url_no = lh.handler(_event_with_headers(body, no_tok), None)
+    check(r_url_no["statusCode"] == 401, f"SigV4 Authorization alone must not pass the bearer check, got {r_url_no['statusCode']}")
+    bad_tok = {"content-type": "application/json", "authorization": sigv4, "x-kitty-hawk-token": "wrong"}
+    r_url_bad = lh.handler(_event_with_headers(body, bad_tok), None)
+    check(r_url_bad["statusCode"] == 401, f"wrong token header should be 401, got {r_url_bad['statusCode']}")
+    smuggle = {"content-type": "application/json", "authorization": f"Bearer {TOKEN}"}
+    r_smuggle = lh.handler(_event_with_headers(body, smuggle), None)
+    check(r_smuggle["statusCode"] == 401, "a Bearer token in Authorization alone must be discarded by the Function URL handler")
 
     print(f"All {checks} M6d lambda_handler checks passed.")
 
