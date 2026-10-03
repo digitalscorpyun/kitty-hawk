@@ -14,24 +14,34 @@
 #   - Executed once on Ubuntu 24.04 (WSL2), Python 3.12.3, x86_64: POST /agent/run with FakeClient and a
 #     SQLite trace store returned HTTP 200 / success, three runs of three, in isolation (only this set and
 #     test-only httpx dependencies on the import path). That is not a Lambda execution.
-#   - Python 3.12 is an assumption; the Lambda runtime version is not chosen.
+#   - Python 3.12 was selected on 2026-10-03 (documentation-based; not run on Lambda).
 #   - Only the success-case request path was exercised. Other paths may need packages removed here
 #     (a persistent Chroma client, Postgres/psycopg2, a live watsonx call needing requests, etc.).
-#   - No Lambda entry-point adapter (for example Mangum) is included or measured.
+#   - 2026-10-03 re-measure: Mangum 0.22.0 (core/lambda_handler.py's adapter) was added, and the first
+#     Linux run of the handler test then showed chromadb imports httpx at load time. The earlier 'isolated'
+#     run had httpx on the path as a test-only dependency, so it was never in the measured set. httpx,
+#     httpcore, h11, certifi and idna are therefore added as runtime packages. See docs/M6D_PLAN_REV3.md;
+#     the 36-package figures above are preserved as history.
 #   - Versions are pinned from the local development environment; the Linux wheels used were the same pins.
 #
 annotated-doc==0.0.5
 annotated-types==0.7.0
 anyio==4.12.0
 attrs==25.4.0
+certifi==2025.11.12
 chromadb==1.5.9
 exceptiongroup==1.2.2
 fastapi==0.141.1
 googleapis-common-protos==1.75.3
 greenlet==3.5.6
 grpcio==1.84.0
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.11
 jsonschema-specifications==2025.9.1
 jsonschema==4.26.0
+mangum==0.22.0
 numpy==2.2.6
 opentelemetry-api==1.44.0
 opentelemetry-exporter-otlp-proto-common==1.44.0
