@@ -1,0 +1,58 @@
+# requirements-lambda.txt -- trimmed, pinned runtime set for a possible Lambda ZIP deployment (M6d, planning only)
+#
+# NOT used by anything yet. The repo's requirements.txt is unchanged and remains the development set.
+# Measured 2026-10-02: Linux (manylinux, CPython 3.12) wheels for exactly these 36 packages unzip to
+# 173,809,918 bytes (about 173.8 MB), against Lambda's documented 250 MB unzipped ZIP limit
+# (see docs/M6D_PLAN_REV3.md).
+#
+# History: a first 34-package version passed a Windows trim test but failed on real Linux, because
+# chromadb imports pybase64 and orjson at load time. Windows had hidden that: removing a package left
+# an empty directory that Python treats as a namespace package, so the import succeeded as a stub.
+# pybase64 and orjson were added back after the Linux run; the set below then passed.
+#
+# Limits of that measurement:
+#   - Executed once on Ubuntu 24.04 (WSL2), Python 3.12.3, x86_64: POST /agent/run with FakeClient and a
+#     SQLite trace store returned HTTP 200 / success, three runs of three, in isolation (only this set and
+#     test-only httpx dependencies on the import path). That is not a Lambda execution.
+#   - Python 3.12 is an assumption; the Lambda runtime version is not chosen.
+#   - Only the success-case request path was exercised. Other paths may need packages removed here
+#     (a persistent Chroma client, Postgres/psycopg2, a live watsonx call needing requests, etc.).
+#   - No Lambda entry-point adapter (for example Mangum) is included or measured.
+#   - Versions are pinned from the local development environment; the Linux wheels used were the same pins.
+#
+annotated-doc==0.0.5
+annotated-types==0.7.0
+anyio==4.12.0
+attrs==25.4.0
+chromadb==1.5.9
+exceptiongroup==1.2.2
+fastapi==0.141.1
+googleapis-common-protos==1.75.3
+greenlet==3.5.6
+grpcio==1.84.0
+jsonschema-specifications==2025.9.1
+jsonschema==4.26.0
+numpy==2.2.6
+opentelemetry-api==1.44.0
+opentelemetry-exporter-otlp-proto-common==1.44.0
+opentelemetry-exporter-otlp-proto-grpc==1.44.0
+opentelemetry-proto==1.44.0
+opentelemetry-sdk==1.44.0
+opentelemetry-semantic-conventions==0.65b0
+orjson==3.12.0
+overrides==7.7.0
+protobuf==6.33.6
+pybase64==1.5.0
+pydantic-settings==2.15.0
+pydantic==2.12.5
+pydantic_core==2.41.5
+python-dotenv==1.2.3
+pytz==2025.2
+PyYAML==6.0.3
+referencing==0.37.0
+rpds-py==0.30.0
+SQLAlchemy==2.0.54
+starlette==1.6.0
+tenacity==9.1.2
+typing-inspection==0.4.2
+typing_extensions==4.15.0
