@@ -8,6 +8,32 @@ only. No live watsonx.ai / Granite call, and no M6e (Orchestrate comparison).
 
 Measurements referenced here: [M6D_COLD_START_LATENCY.md](M6D_COLD_START_LATENCY.md).
 
+## Status note, 2026-10-03: AWS deployment BLOCKED; no AWS resource was created
+
+The local build is done; the AWS deployment was stopped by the operator. The sections below are otherwise unchanged
+and still describe API Gateway as the front door.
+
+- **Operator decisions (in-channel, 2026-10-03):** a Lambda **Function URL with `AWS_IAM` auth** replaces API Gateway,
+  to hold the "$0, no credit use" constraint. The bearer token travels in `X-Kitty-Hawk-Token`, because SigV4 and the
+  bearer check both use `Authorization` (`core/lambda_handler.py` maps it). The no-S3 and $0/no-credit-use
+  constraints are **unchanged**; the operator declined a temporary S3 bucket and a stub function.
+- **Verified before stopping (AWS MCP server, read-only):** account `378371844589`, us-east-1; Free plan ACTIVE,
+  $157.47 credits, expires 2027-01-09; none of the planned `kankou-khm6d-*` resources exist.
+- **Why blocked:** the package does not fit in one direct upload (a single ZIP was 54.9 MB against the 50 MB limit),
+  so it is built as a function ZIP (18,479,507 bytes) plus a layer ZIP (36,382,778 bytes). The AWS MCP server's script
+  sandbox has no network and no access to local files, so it cannot read those ZIPs; its only local-file route is an
+  S3 presigned URL, which needs an S3 bucket. The Bash `aws iam create-role` route was denied twice by Claude Code's
+  permission check and is not being worked around.
+- **To resume, one of these must change (operator decision):**
+  1. Allow a temporary, tagged S3 bucket for the two ZIPs, deleted at teardown (relaxes "no S3" and, slightly,
+     "no credit use"; its free-tier terms are unconfirmed), or
+  2. Add AWS write permissions for the Bash route (allow rules for `aws iam create-role`, `attach-role-policy`,
+     `aws logs create-log-group`, `put-retention-policy`, `aws lambda publish-layer-version`, `create-function`,
+     `create-function-url-config`, and the matching delete commands), so the CLI can send the ZIPs directly, or
+  3. Shrink the package below what can be carried inline (not realistic for chromadb and numpy), or
+  4. Run the build and teardown yourself from a script.
+  The ZIP build script is not in the repo (session scratch only); rebuild before any attempt and retest on Linux/3.12.
+
 ## Working decisions (confirmed 2026-10-02)
 
 1. **Packaging:** measure the final Linux dependency set; trim first, and assess a container image
